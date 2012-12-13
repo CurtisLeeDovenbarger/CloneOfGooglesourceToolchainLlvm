@@ -175,6 +175,17 @@ class FNMADDSUB<bits<3> funct, bits<3> fmt, string opstr, string fmtstr,
             !strconcat(opstr, ".", fmtstr, "\t$fd, $fr, $fs, $ft"),
             [(set RC:$fd, (fsub fpimm0, (OpNode (fmul RC:$fs, RC:$ft), RC:$fr)))]>;
 
+class BC1F_FT<string opstr, InstrItinClass Itin,
+              SDPatternOperator Op = null_frag>  :
+  InstSE<(outs), (ins brtarget:$offset), !strconcat(opstr, "\t$offset"),
+         [(MipsFPBrcond Op, bb:$offset)], Itin, FrmFI> {
+  let isBranch = 1;
+  let isTerminator = 1;
+  let hasDelaySlot = 1;
+  let Defs = [AT];
+  let Uses = [FCR31];
+}
+
 //===----------------------------------------------------------------------===//
 // Floating Point Instructions
 //===----------------------------------------------------------------------===//
@@ -385,8 +396,8 @@ let isBranch=1, isTerminator=1, hasDelaySlot=1, base=0x8, Uses=[FCR31] in
 }
 
 let DecoderMethod = "DecodeBC1" in {
-def BC1F  : FBRANCH<0, 0, MIPS_BRANCH_F,  "bc1f">;
-def BC1T  : FBRANCH<0, 1, MIPS_BRANCH_T,  "bc1t">;
+def BC1F : BC1F_FT<"bc1f", IIBranch, MIPS_BRANCH_F>, BC1F_FM<0, 0>;
+def BC1T : BC1F_FT<"bc1t", IIBranch, MIPS_BRANCH_T>, BC1F_FM<0, 1>;
 }
 //===----------------------------------------------------------------------===//
 // Floating Point Flag Conditions
