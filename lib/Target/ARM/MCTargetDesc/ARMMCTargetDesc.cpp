@@ -186,7 +186,7 @@ static MCStreamer *createMCStreamer(const Target &T, StringRef TT,
     llvm_unreachable("ARM does not support Windows COFF format");
   }
 
-  return createELFStreamer(Ctx, MAB, OS, Emitter, false, NoExecStack);
+  return createARMELFStreamer(Ctx, MAB, OS, Emitter, false, NoExecStack);
 }
 
 static MCInstPrinter *createARMMCInstPrinter(const Target &T,

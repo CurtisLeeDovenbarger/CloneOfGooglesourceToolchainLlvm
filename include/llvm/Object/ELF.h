@@ -444,6 +444,7 @@ struct Elf_Phdr<target_endianness, true> {
 
 template<support::endianness target_endianness, bool is64Bits>
 class ELFObjectFile : public ObjectFile {
+public:
   LLVM_ELF_IMPORT_TYPES(target_endianness, is64Bits)
 
   typedef Elf_Ehdr_Impl<target_endianness, is64Bits> Elf_Ehdr;
@@ -711,6 +712,9 @@ public:
   virtual error_code getSectionContents(const Elf_Shdr *sec,
                                         StringRef &Res) const;
 
+  const Elf_Ehdr *getElfHeader() const {
+    return Header;
+  }
   uint64_t getNumSections() const;
   uint64_t getStringTableIndex() const;
   ELF::Elf64_Word getSymbolTableIndex(const Elf_Sym *symb) const;
