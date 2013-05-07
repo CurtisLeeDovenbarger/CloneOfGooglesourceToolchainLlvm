@@ -17115,6 +17115,12 @@ char $ac_func ();
 choke me
 #endif
 
+#if defined __ANDROID__
+// Android NDK has mkdtemp in libc.so but not in stdlib.h.
+// We disable this function or it may cause compile error.
+#define mkdtemp __disable_mkdtemp
+#endif
+
 int
 main ()
 {
