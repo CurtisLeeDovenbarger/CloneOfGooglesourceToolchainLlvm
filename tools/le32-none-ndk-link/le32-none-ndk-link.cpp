@@ -21,6 +21,7 @@
 
 #include "llvm/LLVMContext.h"
 #include "llvm/Module.h"
+#include "llvm/Bitcode/Archive.h"
 #include "llvm/Bitcode/ReaderWriter.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileUtilities.h"
@@ -42,6 +43,9 @@ Shared("shared", cl::ZeroOrMore, cl::desc("Generate shared bitcode library"));
 static cl::opt<std::string>
 OutputFilename("o", cl::desc("Override output filename"),
                 cl::value_desc("output bitcode file"));
+
+static cl::opt<std::string> Sysroot("sysroot",
+                                    cl::desc("Specify sysroot"));
 
 static cl::list<std::string>
 LibPaths("L", cl::Prefix,
@@ -91,9 +95,6 @@ ZOptions("z", cl::desc("-z keyword"), cl::value_desc("keyword"));
 static cl::list<std::string> CO1("Wl", cl::Prefix,
   cl::desc("Compatibility option: ignored"));
 
-static cl::opt<std::string> CO2("sysroot",
-  cl::desc("Compatibility option: ignored"));
-
 static cl::opt<std::string> CO3("exclude-libs",
   cl::desc("Compatibility option: ignored"));
 
@@ -117,7 +118,11 @@ static cl::list<bool> CO8("start-group",
 static cl::list<bool> CO9("end-group",
   cl::desc("Compatibility option: ignored"));
 
+static std::vector<std::string> DepLibs;
+
 static std::string progname;
+
+static std::string OutputInfoFile;
 
 // FileRemover objects to clean up output files on the event of an error.
 static FileRemover OutputRemover;
@@ -258,8 +263,8 @@ static void WrapAndroidBitcode(std::vector<std::string*> &BCStrings, raw_ostream
   }
 
   // Add dependent library
-  for (cl::list<std::string>::const_iterator lib_iter = Libraries.begin(),
-       lib_end = Libraries.end(); lib_iter != lib_end; ++lib_iter) {
+  for (cl::list<std::string>::const_iterator lib_iter = DepLibs.begin(),
+       lib_end = DepLibs.end(); lib_iter != lib_end; ++lib_iter) {
     const char *depend_lib = lib_iter->c_str();
     BCHeaderField DependLibField(BCHeaderField::kAndroidDependLibrary,
                                  lib_iter->size()+1, (uint8_t *) depend_lib);
@@ -322,6 +327,70 @@ void GenerateBitcode(std::vector<std::string*> &BCStrings, const std::string& Fi
   Out.keep();
 }
 
+static bool isBitcodeArchive(sys::Path FilePath) {
+  if (!FilePath.isArchive())
+    return false;
+
+  std::string ErrMsg;
+  std::auto_ptr<Archive> AutoArch (
+    Archive::OpenAndLoad(FilePath,
+                         llvm::getGlobalContext(),
+                         &ErrMsg));
+  Archive* arch = AutoArch.get();
+
+  if (!arch) {
+    return false;
+  }
+
+  return arch->isBitcodeArchive();
+}
+
+static sys::Path IsLibrary(StringRef Name,
+                           const sys::Path &Directory) {
+  sys::Path FullPath(Directory);
+
+  // 1. Try bitcode archives
+  FullPath.appendComponent(("lib" + Name).str());
+  FullPath.appendSuffix("a");
+  if (isBitcodeArchive(FullPath))
+    return FullPath;
+
+  // 2. Try libX.so
+  FullPath.eraseSuffix();
+  FullPath.appendSuffix("so");
+
+  if (FullPath.isDynamicLibrary())
+    return FullPath;
+  if (FullPath.isBitcodeFile())
+    return FullPath;
+
+  // 3. Try native archives
+  FullPath.eraseSuffix();
+  FullPath.appendComponent(("lib" + Name).str());
+  FullPath.appendSuffix("a");
+  if (FullPath.isArchive())
+    return FullPath;
+
+  // Not found
+  FullPath.clear();
+  return FullPath;
+}
+
+static sys::Path FindLib(StringRef Filename) {
+  sys::Path FilePath(Filename);
+  if (FilePath.canRead() &&
+      (FilePath.isArchive() || FilePath.isDynamicLibrary()))
+    return FilePath;
+
+  for (unsigned Index = 0; Index != LibPaths.size(); ++Index) {
+    sys::Path Directory(LibPaths[Index]);
+    sys::Path FullPath = IsLibrary(Filename, Directory);
+    if (!FullPath.isEmpty())
+      return FullPath;
+  }
+  return sys::Path();
+}
+
 static void BuildLinkItems(
   AndroidBitcodeLinker::ABCItemList& Items,
   const cl::list<std::string>& Files) {
@@ -366,6 +435,51 @@ static void BuildLinkItems(
         errs() << *fileIt << ":" << isWhole << '\n';
       Items.push_back(AndroidBitcodeItem(*fileIt++, isWhole));
   }
+
+  // Find libaries in search path
+  for (cl::list<std::string>::const_iterator lib_iter = Libraries.begin(),
+       lib_end = Libraries.end(); lib_iter != lib_end; ++lib_iter) {
+    sys::Path p = FindLib(*lib_iter);
+
+    if (!p.empty()) {
+      bool isWhole = false;
+      int filePos = Libraries.getPosition(lib_iter - Libraries.begin());
+      for(unsigned i = 0 ; i < wholeRange.size() ; ++i) {
+        if (filePos > wholeRange[i].first &&
+           (filePos < wholeRange[i].second || wholeRange[i].second == -1)) {
+          isWhole = true;
+          break;
+        }
+      }
+      Items.push_back(AndroidBitcodeItem(p.str(), isWhole));
+    }
+    else {
+      if (Verbose) {
+        errs() << "Warning: cannot find -l" << *lib_iter << ", dropped\n";
+      }
+    }
+  }
+}
+
+static void DumpLDFlags(int argc, char **argv, const std::string &FileName)
+{
+  // Create the info file.
+  std::string ErrorInfo;
+  tool_output_file Out(FileName.c_str(), ErrorInfo);
+
+  if (!ErrorInfo.empty()) {
+    PrintAndExit(ErrorInfo);
+    return;
+  }
+
+  for (int i = 1 ; i < argc ; ++i) {
+    sys::Path path(argv[i]);
+    // if input is bitcode or bitcode archieve, ignore it
+    if (!path.isBitcodeFile() && !isBitcodeArchive(path))
+      Out.os() << argv[i] << ' ';
+  }
+
+  Out.keep();
 }
 
 int main(int argc, char** argv) {
@@ -379,9 +493,18 @@ int main(int argc, char** argv) {
 
   cl::ParseCommandLineOptions(argc, argv, "Bitcode link tool\n");
 
+  // Store LDFLAGS in .info file
+  // TODO: CFLAGS
+  OutputInfoFile = OutputFilename + ".info";
+  DumpLDFlags(argc, argv, OutputInfoFile);
+
   // Arrange for the output file to be delete on any errors.
   OutputRemover.setFile(OutputFilename);
   sys::RemoveFileOnSignal(sys::Path(OutputFilename));
+
+  // Add default search path
+  if (!Sysroot.empty())
+    LibPaths.insert(LibPaths.begin(), Sysroot + "/usr/lib");
 
   // Build a list of the items from our command line
   AndroidBitcodeLinker::ABCItemList Items;
@@ -396,26 +519,26 @@ int main(int argc, char** argv) {
 
   AndroidBitcodeLinker linker(Config);
 
-  // TODO: Add library path to the linker
-  // linker.addPaths(LibPaths);
-
   if (linker.LinkInAndroidBitcodes(Items, BCStrings))
     return 1;
 
   // Add bitcode libraries dependents
   for (unsigned i = 0; i < Items.size(); ++i) {
     BitcodeWrapper *wrapper = Items[i].getWrapper();
+    std::string libname;
+
     if (wrapper != 0 && wrapper->getBitcodeType() == BCHeaderField::BC_SharedObject) {
-      std::string soname = wrapper->getSOName();
-      if (soname.substr(0,3) == "lib") {
-        // Extract the library name
-        Libraries.push_back(soname.substr(3,soname.length()-3));
-      }
+      libname = sys::path::stem(wrapper->getSOName());
+    }
+
+    // Extract the library name
+    if (!libname.empty() && libname.substr(0,3) == "lib") {
+      DepLibs.push_back(libname.substr(3));
     }
   }
 
   // Remove any consecutive duplication of the same library
-  Libraries.erase(std::unique(Libraries.begin(), Libraries.end()), Libraries.end());
+  DepLibs.erase(std::unique(DepLibs.begin(), DepLibs.end()), DepLibs.end());
 
   // Write linked bitcode
   GenerateBitcode(BCStrings, OutputFilename);
