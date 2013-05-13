@@ -17,6 +17,7 @@
 #include "Mips.h"
 #include "MipsAnalyzeImmediate.h"
 #include "MipsRegisterInfo.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Target/TargetInstrInfo.h"
 
@@ -70,6 +71,11 @@ public:
 
   /// Return the number of bytes of code the specified instruction may be.
   unsigned GetInstSizeInBytes(const MachineInstr *MI) const;
+
+  /// Create an instruction which has the same operands and memory operands
+  /// as MI but has a new opcode.
+  MachineInstrBuilder genInstrWithNewOpc(unsigned NewOpc,
+                                         MachineBasicBlock::iterator I) const;
 
 protected:
   bool isZeroImm(const MachineOperand &op) const;
