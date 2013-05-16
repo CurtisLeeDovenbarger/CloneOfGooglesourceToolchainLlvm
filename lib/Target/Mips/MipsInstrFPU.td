@@ -91,13 +91,17 @@ let DecoderMethod = "DecodeFMem" in {
 class FPLoad<bits<6> op, string opstr, RegisterClass RC, Operand MemOpnd>:
   FMem<op, (outs RC:$ft), (ins MemOpnd:$addr),
       !strconcat(opstr, "\t$ft, $addr"), [(set RC:$ft, (load addr:$addr))],
-      IILoad>;
+      IILoad> {
+  let mayLoad = 1;
+}
 
 // FP store.
 class FPStore<bits<6> op, string opstr, RegisterClass RC, Operand MemOpnd>:
   FMem<op, (outs), (ins RC:$ft, MemOpnd:$addr),
       !strconcat(opstr, "\t$ft, $addr"), [(store RC:$ft, addr:$addr)],
-      IIStore>;
+      IIStore> {
+  let mayStore = 1;
+}
 }
 // FP indexed load.
 class FPIdxLoad<bits<6> funct, string opstr, RegisterClass DRC,
@@ -277,8 +281,16 @@ let Predicates = [NotN64, HasMips64, HasStandardEncoding],
 }
 
 let Predicates = [NotN64, NotMips64, HasStandardEncoding] in {
-  def LDC1   : FPLoad<0x35, "ldc1", AFGR64, mem>;
-  def SDC1   : FPStore<0x3d, "sdc1", AFGR64, mem>;
+  let isPseudo = 1, isCodeGenOnly = 1 in {
+    def PseudoLDC1 : FPLoad<0x35, "ldc1", AFGR64, mem>;
+    def PseudoSDC1 : FPStore<0x3d, "sdc1", AFGR64, mem>;
+  }
+  def LDC1   : FPLoad<0x35, "ldc1", AFGR64, mem> {
+    let Pattern = [];
+  }
+  def SDC1   : FPStore<0x3d, "sdc1", AFGR64, mem> {
+    let Pattern = [];
+  }
 }
 
 // Indexed loads and stores.
