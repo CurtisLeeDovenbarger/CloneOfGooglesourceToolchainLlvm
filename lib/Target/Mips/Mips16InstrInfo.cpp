@@ -134,9 +134,9 @@ bool Mips16InstrInfo::expandPostRAPseudo(MachineBasicBlock::iterator MI) const {
   return true;
 }
 
-/// GetOppositeBranchOpc - Return the inverse of the specified
+/// getOppositeBranchOpc - Return the inverse of the specified
 /// opcode, e.g. turning BEQ to BNE.
-unsigned Mips16InstrInfo::GetOppositeBranchOpc(unsigned Opc) const {
+unsigned Mips16InstrInfo::getOppositeBranchOpc(unsigned Opc) const {
   switch (Opc) {
   default:  llvm_unreachable("Illegal opcode!");
   case Mips::BeqzRxImmX16: return Mips::BnezRxImmX16;
@@ -176,7 +176,7 @@ void Mips16InstrInfo::adjustStackPtr(unsigned SP, int64_t Amount,
     assert(false && "adjust stack pointer amount exceeded");
 }
 
-unsigned Mips16InstrInfo::GetAnalyzableBrOpc(unsigned Opc) const {
+unsigned Mips16InstrInfo::getAnalyzableBrOpc(unsigned Opc) const {
   return (Opc == Mips::BeqzRxImmX16   || Opc == Mips::BimmX16  ||
           Opc == Mips::BnezRxImmX16   || Opc == Mips::BteqzX16 ||
           Opc == Mips::BteqzT8CmpX16  || Opc == Mips::BteqzT8CmpiX16 ||

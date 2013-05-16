@@ -63,7 +63,7 @@ public:
 
   virtual bool expandPostRAPseudo(MachineBasicBlock::iterator MI) const;
 
-  virtual unsigned GetOppositeBranchOpc(unsigned Opc) const;
+  virtual unsigned getOppositeBranchOpc(unsigned Opc) const;
 
   /// Adjust SP by Amount bytes.
   void adjustStackPtr(unsigned SP, int64_t Amount, MachineBasicBlock &MBB,
@@ -77,13 +77,13 @@ public:
                          unsigned *NewImm) const;
 
 private:
-  virtual unsigned GetAnalyzableBrOpc(unsigned Opc) const;
+  virtual unsigned getAnalyzableBrOpc(unsigned Opc) const;
 
-  void ExpandRetRA(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
+  void expandRetRA(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
                    unsigned Opc) const;
-  void ExpandExtractElementF64(MachineBasicBlock &MBB,
+  void expandExtractElementF64(MachineBasicBlock &MBB,
                                MachineBasicBlock::iterator I) const;
-  void ExpandBuildPairF64(MachineBasicBlock &MBB,
+  void expandBuildPairF64(MachineBasicBlock &MBB,
                           MachineBasicBlock::iterator I) const;
 };
 
