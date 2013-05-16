@@ -235,7 +235,7 @@ bool BitcodeWrapperer::ParseWrapperHeader() {
         BCHeaderField::FixedSubfield len;
         union {
           uint32_t int32;
-          uint8_t* char8;
+          uint8_t char8[kMaxVariableFieldSize];
         }val;
       };
       FieldHelper tempField;
