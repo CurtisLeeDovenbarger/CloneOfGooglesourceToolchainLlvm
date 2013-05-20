@@ -162,6 +162,8 @@ public:
 #ifndef NDEBUG
     IndentLevel = 0;
 #endif
+    Desc.make_weak();
+    InlinedAtLocation.make_weak();
     if (Parent)
       Parent->addChild(this);
   }
