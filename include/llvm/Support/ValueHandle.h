@@ -225,9 +225,11 @@ public:
     return getValPtr();
   }
 
+#ifndef NDEBUG
   void make_weak() {
     setKind(Weak);
   }
+#endif
 
   ValueTy *operator=(ValueTy *RHS) {
     setValPtr(RHS);
