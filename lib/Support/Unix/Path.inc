@@ -71,6 +71,12 @@
 # undef HAVE_MKDTEMP
 #endif
 
+// Put in a hack for Android which does not declare the prototype of
+// mkdtemp() in stdlib.h, but with the implementation in libc.so.
+#if defined(__ANDROID__) && defined(HAVE_MKDTEMP)
+extern "C" char *mkdtemp(const char *);
+#endif
+
 namespace {
 inline bool lastIsSlash(const std::string& path) {
   return !path.empty() && path[path.length() - 1] == '/';
