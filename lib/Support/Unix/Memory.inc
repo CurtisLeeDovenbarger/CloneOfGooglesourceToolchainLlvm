@@ -330,7 +330,7 @@ void Memory::InvalidateInstructionCache(const void *Addr,
   const char *Start = static_cast<const char *>(Addr);
   const char *End = Start + Len;
   __clear_cache(const_cast<char *>(Start), const_cast<char *>(End));
-#  elif defined(__mips__)
+#  elif defined(__mips__) && !defined(__ANDROID__)
   const char *Start = static_cast<const char *>(Addr);
 #    if defined(ANDROID)
   // The declaration of "cacheflush" in Android bionic:
