@@ -385,7 +385,9 @@ case "$llvm_cv_target_arch" in
 esac
 
 dnl Define a substitution, ARCH, for the target architecture
-AC_SUBST(ARCH,$llvm_cv_target_arch)
+if test -z "$ARCH" ; then
+  AC_SUBST(ARCH,$llvm_cv_target_arch)
+fi
 
 dnl Determine what our host architecture.
 dnl This will allow MCJIT regress tests runs only for supported
@@ -1349,6 +1351,9 @@ AC_HEADER_STAT
 AC_HEADER_SYS_WAIT
 AC_HEADER_TIME
 
+AC_LANG_PUSH([C++])
+AC_CHECK_HEADERS([cxxabi.h])
+AC_LANG_POP([C++])
 AC_CHECK_HEADERS([dlfcn.h execinfo.h fcntl.h inttypes.h limits.h link.h])
 AC_CHECK_HEADERS([malloc.h setjmp.h signal.h stdint.h termios.h unistd.h])
 AC_CHECK_HEADERS([utime.h windows.h])
