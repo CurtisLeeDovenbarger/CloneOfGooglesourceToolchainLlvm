@@ -103,6 +103,7 @@ public:
     Minix,
     RTEMS,
     NaCl,       // Native Client
+    NDK,        // Android NDK
     CNK,        // BG/P Compute-Node Kernel
     Bitrig,
     AIX
