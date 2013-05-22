@@ -102,13 +102,11 @@ AndroidBitcodeLinker::LoadAndroidBitcode(AndroidBitcodeItem &Item) {
   BitcodeWrapper *wrapper = new BitcodeWrapper(buffer->getBufferStart(), buffer->getBufferSize());
   Item.setWrapper(wrapper);
   assert(Item.getWrapper() != 0);
-  if (wrapper->getBCFileType() == BC_RAW) {
-    std::string ParseErrorMessage;
-    Result = ParseBitcodeFile(buffer, Config.getContext(), &ParseErrorMessage);
-    if (Result == 0) {
-      Error = "Bitcode file '" + FN.str() + "' could not be loaded."
-                + ParseErrorMessage;
-    }
+  Result = ParseBitcodeFile(buffer, Config.getContext(), &ParseErrorMessage);
+  if (Result == 0) {
+    Error = "Bitcode file '" + FN.str() + "' could not be loaded."
+              + ParseErrorMessage;
+    errs() << Error << '\n';
   }
 
   return Result;
@@ -167,10 +165,15 @@ AndroidBitcodeLinker::LinkInAndroidBitcode(AndroidBitcodeItem &Item) {
 
   // Determine what variety of file it is.
   std::string Magic;
-  if (!File.getMagicNumber(Magic, 8))
+  const sys::FileStatus *fs = File.getFileStatus();
+  if (fs == 0)
     return error("Cannot find linker input '" + File.str() + "'");
 
-  switch (sys::IdentifyFileType(Magic.c_str(), 8)) {
+  int FileLength = fs->getSize();
+  if (!File.getMagicNumber(Magic, std::min(64, FileLength)))
+    return error("Cannot find linker input '" + File.str() + "'");
+
+  switch (sys::IdentifyFileType(Magic.c_str(), std::min(64, FileLength))) {
     case sys::Archive_FileType: {
       if (Item.isWholeArchive()) {
         verbose("Link whole archive" + File.str());
@@ -201,7 +204,7 @@ AndroidBitcodeLinker::LinkInAndroidBitcode(AndroidBitcodeItem &Item) {
       else
         return error("Invalid bitcode file type" + File.str());
 
-      if (M.get() == 0 && BitcodeType == BCHeaderField::BC_Relocatable)
+      if (M.get() == 0)
         return error("Cannot load file '" + File.str() + "': " + Error);
 
       Triple triple(M.get()->getTargetTriple());
@@ -229,7 +232,16 @@ AndroidBitcodeLinker::LinkInAndroidBitcode(AndroidBitcodeItem &Item) {
       }
       break;
     }
-
+    case sys::ELF_SharedObject_FileType: {
+      Item.setNative(true);
+      break;
+    }
+    case sys::ELF_Relocatable_FileType: {
+      return error("Cannot link ELF relocatable:" + File.str());
+    }
+    case sys::ELF_Executable_FileType: {
+      return error("Cannot link ELF executable:" + File.str());
+    }
     default: {
       return error("Ignoring file '" + File.str() +
                    "' because does not contain bitcode.");
@@ -262,7 +274,7 @@ const sys::PathWithStatus &Filename = Item.getFile();
 
   if (!arch->isBitcodeArchive()) {
     Item.setNative(true);
-    return error("File '" + Filename.str() + "' is not a bitcode archive.");
+    return false;
   }
 
   std::vector<Module*> Modules;
@@ -383,7 +395,7 @@ const sys::PathWithStatus &Filename = Item.getFile();
 
   if (!arch->isBitcodeArchive()) {
     Item.setNative(true);
-    return error("File '" + Filename.str() + "' is not a bitcode archive.");
+    return false;
   }
 
   std::set<std::string> NotDefinedByArchive;
