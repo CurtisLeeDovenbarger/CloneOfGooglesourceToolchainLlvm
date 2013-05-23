@@ -105,6 +105,8 @@ protected:
   void setValPtrInt(unsigned K) { VP.setInt(K); }
   unsigned getValPtrInt() const { return VP.getInt(); }
 
+  void setKind(HandleBaseKind K) { PrevPair.setInt(K); }
+
   static bool isValid(Value *V) {
     return V &&
            V != DenseMapInfo<Value *>::getEmptyKey() &&
@@ -221,6 +223,12 @@ public:
   operator ValueTy*() const {
     return getValPtr();
   }
+
+#ifndef NDEBUG
+  void make_weak() {
+    setKind(Weak);
+  }
+#endif
 
   ValueTy *operator=(ValueTy *RHS) {
     setValPtr(RHS);

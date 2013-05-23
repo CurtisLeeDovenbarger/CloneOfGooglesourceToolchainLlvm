@@ -159,6 +159,10 @@ public:
   LexicalScope(LexicalScope *P, const MDNode *D, const MDNode *I, bool A)
     : Parent(P), Desc(D), InlinedAtLocation(I), AbstractScope(A),
       LastInsn(0), FirstInsn(0), DFSIn(0), DFSOut(0) {
+#ifndef NDEBUG
+    Desc.make_weak();
+    InlinedAtLocation.make_weak();
+#endif
     if (Parent)
       Parent->addChild(this);
   }
