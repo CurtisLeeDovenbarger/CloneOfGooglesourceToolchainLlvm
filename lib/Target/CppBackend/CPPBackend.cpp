@@ -33,6 +33,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Config/config.h"
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <map>
 #include <set>

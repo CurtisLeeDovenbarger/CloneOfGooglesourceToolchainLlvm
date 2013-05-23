@@ -28,6 +28,7 @@
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringMap.h"
 #include <algorithm>
+#include <cctype>
 using namespace llvm;
 
 static cl::opt<std::string>

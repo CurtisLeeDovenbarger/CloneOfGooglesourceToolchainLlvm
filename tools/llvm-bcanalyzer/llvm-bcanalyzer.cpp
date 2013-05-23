@@ -43,6 +43,7 @@
 
 #include <map>
 #include <algorithm>
+#include <cctype>
 using namespace llvm;
 
 static cl::opt<std::string>
