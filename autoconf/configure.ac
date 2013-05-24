@@ -831,6 +831,9 @@ case "$withval" in
     esac ;;
   *) optimize_option="$withval" ;;
 esac
+if test "$LLVM_CROSS_COMPILING" = "1"; then
+  optimize_option="$optimize_option -Os"
+fi
 AC_SUBST(OPTIMIZE_OPTION,$optimize_option)
 AC_MSG_RESULT([$optimize_option])
 
@@ -843,6 +846,10 @@ case "$withval" in
   default) EXTRA_OPTIONS= ;;
   *) EXTRA_OPTIONS=$withval ;;
 esac
+if test "$LLVM_CROSS_COMPILING" = "1"; then
+  # For binary size reduction
+  EXTRA_OPTIONS="$EXTRA_OPTIONS -fdata-sections -ffunction-sections -fvisibility-inlines-hidden"
+fi
 AC_SUBST(EXTRA_OPTIONS,$EXTRA_OPTIONS)
 
 dnl Specify extra linker build options
@@ -854,6 +861,10 @@ case "$withval" in
   default) EXTRA_LD_OPTIONS= ;;
   *) EXTRA_LD_OPTIONS=$withval ;;
 esac
+if test "$LLVM_CROSS_COMPILING" = "1"; then
+  # Cooperative with -ffunction-sections, -fdata-sections
+  EXTRA_LD_OPTIONS="$EXTRA_LD_OPTIONS -Wl,--gc-sections"
+fi
 AC_SUBST(EXTRA_LD_OPTIONS,$EXTRA_LD_OPTIONS)
 
 dnl Allow specific bindings to be specified for building (or not)
