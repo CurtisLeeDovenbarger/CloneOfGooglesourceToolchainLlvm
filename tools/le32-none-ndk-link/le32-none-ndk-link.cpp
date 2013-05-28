@@ -454,9 +454,7 @@ static void BuildLinkItems(
       Items.push_back(AndroidBitcodeItem(p.str(), isWhole));
     }
     else {
-      if (Verbose) {
-        errs() << "Warning: cannot find -l" << *lib_iter << ", dropped\n";
-      }
+      PrintAndExit("cannot find -l " + *lib_iter);
     }
   }
 }
