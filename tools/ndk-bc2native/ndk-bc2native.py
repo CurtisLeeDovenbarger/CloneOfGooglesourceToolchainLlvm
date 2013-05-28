@@ -141,20 +141,6 @@ def get_as_name_for_arch(arch):
         return 'mipsel-linux-android-as'
     return ''
 
-def libgcc_dir_for_abi(abi):
-    global NDK, HOST_TAG
-    arch = get_arch_for_abi(abi)
-    gcc_toolchain = gcc_toolchain_for_arch(arch)
-    if abi == 'armeabi':
-        return gcc_toolchain+'/lib/gcc/arm-linux-androideabi/4.6/thumb'
-    elif abi == 'armeabi-v7a':
-        return gcc_toolchain+'/lib/gcc/arm-linux-androideabi/4.6/armv7-a/thumb'
-    elif abi == 'x86':
-        return gcc_toolchain+'/lib/gcc/i686-linux-android/4.6'
-    elif abi == 'mips':
-        return gcc_toolchain+'/lib/gcc/mipsel-linux-android/4.6/'
-    return ''
-
 def handle_args():
     global BITCODE, OUTPUT, INFO
     global PLATFORM, LLVM_VERSION, ABI, NDK, LD
@@ -479,7 +465,6 @@ def do_ld(relocatable, output, shared=True):
     global INFO
 
     arch = get_arch_for_abi(ABI)
-    libgcc_dir = libgcc_dir_for_abi(ABI)
     sysroot = sysroot_for_arch(arch)
 
     f = open(INFO,'r')
@@ -494,7 +479,6 @@ def do_ld(relocatable, output, shared=True):
     args += ['-dynamic-linker']
     args += ['/system/bin/linker']
     args += ['-X']
-    args += ['-L'+libgcc_dir]
 
     if SHARED:
         args += [sysroot+'/usr/lib/crtbegin_so.o']
@@ -504,7 +488,10 @@ def do_ld(relocatable, output, shared=True):
     args += ldflags.split()
     args += ['@' + NDK + '/sources/android/libportable/libs/'+ABI+'/libportable.wrap']
     args += [NDK+'/sources/android/libportable/libs/'+ABI+'/libportable.a']
-    args += ['-lgcc']
+    # compiler runtime
+    args += [NDK+'/sources/android/compiler-rt/libs/'+ABI+'/libcompiler_rt_static.a']
+    # unwind library
+    args += [NDK+'/sources/cxx-stl/gabi++/libs/'+ABI+'/libgabi++_shared.so']
     args += ['-ldl']
 
     if SHARED:
