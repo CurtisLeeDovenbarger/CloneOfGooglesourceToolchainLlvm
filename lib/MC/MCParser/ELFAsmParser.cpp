@@ -448,6 +448,8 @@ bool ELFAsmParser::ParseDirectivePrevious(StringRef DirName, SMLoc) {
 
 /// ParseDirectiveELFType
 ///  ::= .type identifier , @attribute
+///  ::= .type identifier , %attribute
+///  ::= .type identifier , "attribute"
 bool ELFAsmParser::ParseDirectiveType(StringRef, SMLoc) {
   StringRef Name;
   if (getParser().ParseIdentifier(Name))
@@ -460,9 +462,14 @@ bool ELFAsmParser::ParseDirectiveType(StringRef, SMLoc) {
     return TokError("unexpected token in '.type' directive");
   Lex();
 
-  if (getLexer().isNot(AsmToken::Percent) && getLexer().isNot(AsmToken::At))
-    return TokError("expected '@' or '%' before type");
-  Lex();
+  if (getLexer().is(AsmToken::Percent) || getLexer().is(AsmToken::At)) {
+    // Skip '%' or '@'.
+    Lex();
+  } else if (getLexer().is(AsmToken::String)) {
+    // Nothing to do.
+  } else {
+    return TokError("expected '@' or '%' before type, or quoted type");
+  }
 
   StringRef Type;
   SMLoc TypeLoc;
