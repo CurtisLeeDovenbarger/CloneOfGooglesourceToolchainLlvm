@@ -1,6 +1,6 @@
 // RUN: llvm-mc -filetype=obj -triple x86_64-pc-linux-gnu %s -o - | llvm-readobj -t | FileCheck %s
 
-// Test that both % and @ are accepted.
+// Test that both % and @ and "" are accepted.
         .global foo
         .type foo,%function
 foo:
@@ -8,6 +8,10 @@ foo:
         .global bar
         .type bar,@object
 bar:
+
+        .global baz
+        .type baz,"object"
+baz:
 
 // Test that gnu_unique_object is accepted.
         .type zed,@gnu_unique_object
@@ -33,6 +37,15 @@ tls:
 
 // CHECK:        Symbol {
 // CHECK:          Name: bar
+// CHECK-NEXT:     Value: 0x0
+// CHECK-NEXT:     Size: 0
+// CHECK-NEXT:     Binding: Global
+// CHECK-NEXT:     Type: Object
+// CHECK-NEXT:     Other: 0
+// CHECK-NEXT:     Section: .text (0x1)
+// CHECK-NEXT:   }
+// CHECK-NEXT:   Symbol {
+// CHECK-NEXT:     Name: baz
 // CHECK-NEXT:     Value: 0x0
 // CHECK-NEXT:     Size: 0
 // CHECK-NEXT:     Binding: Global
