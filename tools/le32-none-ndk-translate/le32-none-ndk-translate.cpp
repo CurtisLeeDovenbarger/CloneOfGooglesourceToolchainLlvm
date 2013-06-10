@@ -42,7 +42,6 @@
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/Transforms/Scalar.h"
-#include "llvm/Wrap/BitcodeWrapper.h"
 
 using namespace llvm;
 
