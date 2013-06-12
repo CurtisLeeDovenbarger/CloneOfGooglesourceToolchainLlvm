@@ -75,7 +75,7 @@ func2:
 @ CHECK:     0x0 R_ARM_PREL31 __gxx_personality_v0 0x0
 @ CHECK:   ]
 @ CHECK:   SectionData (
-@ CHECK:     0000: 00000000 B0B0B000                    |........|
+@ CHECK:     0000: 00000000 B0B0B000 00000000           |............|
 @ CHECK:   )
 @ CHECK: }
 @ CHECK: Section {

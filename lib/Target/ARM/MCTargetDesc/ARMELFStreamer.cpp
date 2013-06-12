@@ -204,7 +204,7 @@ private:
 
   void EmitPersonalityFixup(StringRef Name);
   void FlushPendingOffset();
-  void FlushUnwindOpcodes(bool AllowCompactModel0);
+  void FlushUnwindOpcodes(bool NoHandlerData);
 
   void SwitchToEHSection(const char *Prefix, unsigned Type, unsigned Flags,
                          SectionKind Kind, const MCSymbol &Fn);
@@ -377,7 +377,7 @@ void ARMELFStreamer::FlushPendingOffset() {
   }
 }
 
-void ARMELFStreamer::FlushUnwindOpcodes(bool AllowCompactModel0) {
+void ARMELFStreamer::FlushUnwindOpcodes(bool NoHandlerData) {
   // Emit the unwind opcode to restore $sp.
   if (UsedFP) {
     const MCRegisterInfo &MRI = getContext().getRegisterInfo();
@@ -394,7 +394,7 @@ void ARMELFStreamer::FlushUnwindOpcodes(bool AllowCompactModel0) {
   // For compact model 0, we have to emit the unwind opcodes in the .ARM.exidx
   // section.  Thus, we don't have to create an entry in the .ARM.extab
   // section.
-  if (AllowCompactModel0 && PersonalityIndex == AEABI_UNWIND_CPP_PR0)
+  if (NoHandlerData && PersonalityIndex == AEABI_UNWIND_CPP_PR0)
     return;
 
   // Switch to .ARM.extab section.
@@ -418,6 +418,15 @@ void ARMELFStreamer::FlushUnwindOpcodes(bool AllowCompactModel0) {
   // Emit unwind opcodes
   EmitBytes(StringRef(reinterpret_cast<const char *>(Opcodes.data()),
                       Opcodes.size()), 0);
+
+  // According to ARM EHABI section 9.2, the compact model PR1 and PR2 have an
+  // ARM-specific handler data format.  It is different from the one defined
+  // in Itanium C++ ABI and the one used when the .personality directive
+  // is specified by the user.  This format consists several words which should
+  // be terminated with 0.  If the user didn't specify the .handlerdata
+  // directive, then we should emit a word of 0 to terminate the handler data.
+  if (NoHandlerData)
+    EmitIntValue(0, 4);
 }
 
 void ARMELFStreamer::EmitHandlerData() {
