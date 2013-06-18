@@ -23,7 +23,7 @@ VERBOSE = False
 KEEP = False
 NDK = ''
 HOST_TAG = ''
-LLVM_VERSION = '3.2'
+LLVM_VERSION = '3.3'
 PLATFORM = None
 ABI = None
 LD = None
@@ -35,6 +35,7 @@ TRANSLATE_CMD = None
 LLC_CMD = None
 LD_CMD = None
 AS_CMD = None
+USE_GAS = False
 
 SHARED = True
 SONAME = None
@@ -144,7 +145,7 @@ def get_as_name_for_arch(arch):
 def handle_args():
     global BITCODE, OUTPUT, INFO
     global PLATFORM, LLVM_VERSION, ABI, NDK, LD
-    global VERBOSE, KEEP
+    global VERBOSE, KEEP, USE_GAS
 
     parser = argparse.ArgumentParser(description='''Transform bitcode to binary tool''')
 
@@ -185,6 +186,11 @@ def handle_args():
                          action='store_true',
                          dest='keep')
 
+    parser.add_argument( '--use-gas',
+                         help='Use GNU as to generate object files',
+                         action='store_true',
+                         dest='use_gas')
+
     args = parser.parse_args()
     # TODO: Support multiple input
     BITCODE = args.file[0][0]
@@ -202,6 +208,7 @@ def handle_args():
     PLATFORM = args.platform
     ABI = args.abi
     LD = args.use_ld
+    USE_GAS = args.use_gas
 
     if args.ndk_dir != None:
         NDK = args.ndk_dir
@@ -430,7 +437,7 @@ def do_llc(bitcode, output):
     args = [LLC_CMD]
     args += ['-mtriple='+triple]
 
-    if ABI == 'armeabi' or ABI == 'armeabi-v7a':
+    if (ABI == 'armeabi' or ABI == 'armeabi-v7a') and USE_GAS:
         args += ['-filetype=asm']
     else:
         args += ['-filetype=obj']
@@ -447,7 +454,7 @@ def do_llc(bitcode, output):
     args += [output]
     ret,text = run_cmd(args)
 
-    if ABI == 'armeabi' or ABI == 'armeabi-v7a':
+    if (ABI == 'armeabi' or ABI == 'armeabi-v7a') and USE_GAS:
         o_file = tempfile.NamedTemporaryFile(delete=False)
         ret,text = do_as(output, o_file.name)
         if ret != 0:
