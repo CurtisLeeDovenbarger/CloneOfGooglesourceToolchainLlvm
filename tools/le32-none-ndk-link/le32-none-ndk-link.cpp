@@ -283,7 +283,7 @@ static void WrapAndroidBitcode(std::vector<std::string*> &BCStrings, raw_ostream
   size_t actualWrapperLen = writeAndroidBitcodeWrapper(&wrapper,
                                                        totalBCSize,
                                                        14,   /* FIXME: TargetAPI     */
-                                                       3200, /* llvm-3.2             */
+                                                       3300, /* llvm-3.3             */
                                                        0);   /* OptimizationLevel    */
   wrapper.BitcodeOffset += variable_header_size;
 
