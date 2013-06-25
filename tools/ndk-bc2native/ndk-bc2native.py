@@ -22,6 +22,7 @@ import tempfile, struct, shutil
 VERBOSE = False
 KEEP = False
 NDK = ''
+SYSROOT = ''
 HOST_TAG = ''
 LLVM_VERSION = '3.3'
 PLATFORM = None
@@ -71,10 +72,12 @@ def llvm_bin_path(ndk, host_tag, llvm_ver):
 
 # Return the sysroot for arch.
 def sysroot_for_arch(arch):
-    global NDK, PLATFORM
+    global NDK, SYSROOT, PLATFORM
     sysroot = NDK+'/platforms/'+PLATFORM+'/arch-'+arch
     if os.path.exists(sysroot):
         return sysroot
+    elif os.path.exists(SYSROOT):
+        return SYSROOT
     else:
         error('sysroot not found: %s' % (sysroot))
     return ''
@@ -144,7 +147,7 @@ def get_as_name_for_arch(arch):
 
 def handle_args():
     global BITCODE, OUTPUT, INFO
-    global PLATFORM, LLVM_VERSION, ABI, NDK, LD
+    global PLATFORM, LLVM_VERSION, ABI, NDK, SYSROOT, LD
     global VERBOSE, KEEP, USE_GAS
 
     parser = argparse.ArgumentParser(description='''Transform bitcode to binary tool''')
@@ -162,9 +165,12 @@ def handle_args():
                          dest='platform')
 
     parser.add_argument( '--ndk-dir',
-                         required=True,
                          help='Specify the ndk directory',
                          dest='ndk_dir')
+
+    parser.add_argument( '--sysroot',
+                         help='Specify where is the sysroot (for standalone usage)',
+                         dest='sysroot')
 
     parser.add_argument( '--abi',
                          help='Specify ABI for target binary',
@@ -210,9 +216,16 @@ def handle_args():
     LD = args.use_ld
     USE_GAS = args.use_gas
 
+    if args.ndk_dir != None and args.sysroot != None:
+        error('Either --ndk-dir or --sysroot can only exist one!')
+    if args.ndk_dir == None and args.sysroot == None:
+        error('Either --ndk-dir or --sysroot must exist one!')
     if args.ndk_dir != None:
         NDK = args.ndk_dir
-    log('Android NDK installation path: %s' % (NDK))
+        log('Android NDK installation path: %s' % (NDK))
+    else:
+        SYSROOT = args.sysroot
+        log('Android NDK sysroot path: %s' % (SYSROOT))
 
 def locate_tools():
     global HOST_TAG, NDK, LLVM_VERSION, ABI, LD
@@ -492,12 +505,17 @@ def do_ld(relocatable, output, shared=True):
         args += [sysroot+'/usr/lib/crtbegin_dynamic.o']
     args += [relocatable]
     args += ldflags.split()
-    args += ['@' + NDK + '/sources/android/libportable/libs/'+ABI+'/libportable.wrap']
-    args += [NDK+'/sources/android/libportable/libs/'+ABI+'/libportable.a']
-    # compiler runtime
-    args += [NDK+'/sources/android/compiler-rt/libs/'+ABI+'/libcompiler_rt_static.a']
-    # unwind library
-    args += [NDK+'/sources/cxx-stl/gabi++/libs/'+ABI+'/libgabi++_shared.so']
+    # compiler runtime + unwind library
+    if SYSROOT:
+        args += ['@' + SYSROOT + '/usr/lib/libportable.wrap']
+        args += [SYSROOT + '/usr/lib/libportable.a']
+        args += [SYSROOT + '/usr/lib/libcompiler_rt_static.a']
+        args += [SYSROOT + '/usr/lib/libgabi++_shared.so']
+    else:
+        args += ['@' + NDK + '/sources/android/libportable/libs/'+ABI+'/libportable.wrap']
+        args += [NDK+'/sources/android/libportable/libs/'+ABI+'/libportable.a']
+        args += [NDK+'/sources/android/compiler-rt/libs/'+ABI+'/libcompiler_rt_static.a']
+        args += [NDK+'/sources/cxx-stl/gabi++/libs/'+ABI+'/libgabi++_shared.so']
     args += ['-ldl']
 
     if SHARED:
@@ -508,7 +526,7 @@ def do_ld(relocatable, output, shared=True):
     return run_cmd(args)
 
 def do_compilation():
-    global NDK, PLATFORM
+    global PLATFORM
     global BITCODE, OUTPUT
     global ABI, ARCH
     global VERBOSE, KEEP
@@ -539,7 +557,6 @@ def do_compilation():
     return 0
 
 def main():
-    global NDK
     handle_args()
     locate_tools()
     do_compilation()
