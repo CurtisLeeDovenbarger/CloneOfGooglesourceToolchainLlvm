@@ -39,6 +39,7 @@ using namespace llvm;
 
 cl::opt<bool>
 EnableARMEHABIDescriptors("arm-enable-ehabi-descriptors", cl::Hidden,
+  cl::ZeroOrMore,
   cl::desc("Generate ARM EHABI tables with unwinding descriptors"),
   cl::init(false));
 
