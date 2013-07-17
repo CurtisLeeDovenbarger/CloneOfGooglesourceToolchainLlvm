@@ -123,7 +123,13 @@ private:
   ///
   Function(FunctionType *Ty, LinkageTypes Linkage,
            const Twine &N = "", Module *M = 0);
-
+  /// Each function has a sequential number.
+  /// This is used to make generated code stable in parallel compilation
+private:
+  int seq;
+public:
+  int getSeq() const { return seq; }
+  void setSeq(int num) { seq = num; }
 public:
   static Function *Create(FunctionType *Ty, LinkageTypes Linkage,
                           const Twine &N = "", Module *M = 0) {

@@ -253,13 +253,13 @@ void MMIAddrLabelMapCallbackPtr::allUsesReplacedWith(Value *V2) {
 MachineModuleInfo::MachineModuleInfo(const MCAsmInfo &MAI,
                                      const MCRegisterInfo &MRI,
                                      const MCObjectFileInfo *MOFI)
-  : ImmutablePass(ID), Context(MAI, MRI, MOFI, 0, false) {
+  : ImmutablePass(ID), Context(MAI, MRI, MOFI, 0, false), pMMI(0) {
   initializeMachineModuleInfoPass(*PassRegistry::getPassRegistry());
 }
 
 MachineModuleInfo::MachineModuleInfo()
   : ImmutablePass(ID),
-    Context(*(MCAsmInfo*)0, *(MCRegisterInfo*)0, (MCObjectFileInfo*)0) {
+    Context(*(MCAsmInfo*)0, *(MCRegisterInfo*)0, (MCObjectFileInfo*)0), pMMI(0) {
   llvm_unreachable("This MachineModuleInfo constructor should never be called, "
                    "MMI should always be explicitly constructed by "
                    "LLVMTargetMachine");
@@ -296,6 +296,7 @@ bool MachineModuleInfo::doFinalization(Module &M) {
   delete ObjFileMMI;
   ObjFileMMI = 0;
 
+  pMMI = 0;
   return false;
 }
 
@@ -336,12 +337,17 @@ void MachineModuleInfo::AnalyzeModule(const Module &M) {
 
 //===- Address of Block Management ----------------------------------------===//
 
+sys::CondSmartMutex mutexAddrLabelSymbols;
 
 /// getAddrLabelSymbol - Return the symbol to be used for the specified basic
 /// block when its address is taken.  This cannot be its normal LBB label
 /// because the block may be accessed outside its containing function.
 MCSymbol *MachineModuleInfo::getAddrLabelSymbol(const BasicBlock *BB) {
   // Lazily create AddrLabelSymbols.
+  if (pMMI) {
+    return pMMI->getAddrLabelSymbol(BB);
+  }
+  sys::CondScopedLock locked(mutexAddrLabelSymbols);
   if (AddrLabelSymbols == 0)
     AddrLabelSymbols = new MMIAddrLabelMap(Context);
   return AddrLabelSymbols->getAddrLabelSymbol(const_cast<BasicBlock*>(BB));
@@ -353,6 +359,10 @@ MCSymbol *MachineModuleInfo::getAddrLabelSymbol(const BasicBlock *BB) {
 std::vector<MCSymbol*> MachineModuleInfo::
 getAddrLabelSymbolToEmit(const BasicBlock *BB) {
   // Lazily create AddrLabelSymbols.
+  if (pMMI) {
+    return pMMI->getAddrLabelSymbolToEmit(BB);
+  }
+  sys::CondScopedLock locked(mutexAddrLabelSymbols);
   if (AddrLabelSymbols == 0)
     AddrLabelSymbols = new MMIAddrLabelMap(Context);
  return AddrLabelSymbols->getAddrLabelSymbolToEmit(const_cast<BasicBlock*>(BB));
@@ -367,6 +377,10 @@ void MachineModuleInfo::
 takeDeletedSymbolsForFunction(const Function *F,
                               std::vector<MCSymbol*> &Result) {
   // If no blocks have had their addresses taken, we're done.
+  if (pMMI) {
+    return pMMI->takeDeletedSymbolsForFunction(F, Result);
+  }
+  sys::CondScopedLock locked(mutexAddrLabelSymbols);
   if (AddrLabelSymbols == 0) return;
   return AddrLabelSymbols->
      takeDeletedSymbolsForFunction(const_cast<Function*>(F), Result);

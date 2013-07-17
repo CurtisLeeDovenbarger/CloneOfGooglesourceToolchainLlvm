@@ -17,6 +17,7 @@
 #include "llvm/Support/AlignOf.h"
 #include "llvm/Support/DataTypes.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/Support/Mutex.h"
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -136,6 +137,10 @@ class BumpPtrAllocator {
   static MallocSlabAllocator DefaultSlabAllocator;
 
   template<typename T> friend class SpecificBumpPtrAllocator;
+
+  bool share;
+
+  static sys::CondSmartMutex mutexAllocator;
 public:
   BumpPtrAllocator(size_t size = 4096, size_t threshold = 4096,
                    SlabAllocator &allocator = DefaultSlabAllocator);

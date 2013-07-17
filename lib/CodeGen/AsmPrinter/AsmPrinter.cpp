@@ -154,6 +154,16 @@ void AsmPrinter::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool AsmPrinter::doInitialization(Module &M) {
+  AsmPrinter *pAsm = static_cast<AsmPrinter*>(pPass);
+  if (pAsm) {
+    pAsm->children.push_back(this);
+    OutContext.setParent(&pAsm->OutContext);
+    MMI = getAnalysisIfAvailable<MachineModuleInfo>();
+    MMI->AnalyzeModule(M);
+    MMI->setDebugInfoAvailability(pAsm->MMI->hasDebugInfo());
+    MMI->setParent(pAsm->MMI);
+    return false;
+  }
   OutStreamer.InitStreamer();
 
   MMI = getAnalysisIfAvailable<MachineModuleInfo>();
@@ -845,7 +855,44 @@ void AsmPrinter::EmitDwarfRegOp(const MachineLocation &MLoc) const {
   // FIXME: Produce a DW_OP_bit_piece if we used a superregister
 }
 
+void AsmPrinter::endModuleExceptionWith(Module &M, AsmPrinter *childAsm) {
+  if (!childAsm) return;
+
+  SwapContextWith(childAsm);
+  // Finalize EH information.
+  DE->EndModule();
+  SwapContextWith(childAsm);
+}
+
+void AsmPrinter::endModuleDebugWith(Module &M, AsmPrinter *childAsm) {
+  if (!childAsm) return;
+
+  SwapContextWith(childAsm);
+  // Finalize debug information.
+  DD->endModule();
+  SwapContextWith(childAsm);
+}
+
+void AsmPrinter::emitEndOfAsmFileWith(Module &M, AsmPrinter *childAsm) {
+  if (!childAsm) return;
+
+  SwapContextWith(childAsm);
+
+  // Allow the target to emit any magic that it wants at the end of the file,
+  // after everything else has gone out.
+  EmitEndOfAsmFile(M);
+
+  SwapContextWith(childAsm);
+}
+
 bool AsmPrinter::doFinalization(Module &M) {
+  AsmPrinter *pAsm = static_cast<AsmPrinter*>(pPass);
+  if (pAsm) {
+    pAsm->OutStreamer.setCurrFunc(M.size());
+    OutStreamer.reset();
+    return false;
+  }
+
   // Emit global variables.
   for (Module::const_global_iterator I = M.global_begin(), E = M.global_end();
        I != E; ++I)
@@ -874,6 +921,9 @@ bool AsmPrinter::doFinalization(Module &M) {
   if (DE) {
     {
       NamedRegionTimer T(EHTimerName, DWARFGroupName, TimePassesIsEnabled);
+      for (unsigned childs = 0; childs < children.size(); childs++) {
+        endModuleExceptionWith(M, children[childs]);
+      }
       DE->EndModule();
     }
     delete DE; DE = 0;
@@ -881,6 +931,9 @@ bool AsmPrinter::doFinalization(Module &M) {
   if (DD) {
     {
       NamedRegionTimer T(DbgTimerName, DWARFGroupName, TimePassesIsEnabled);
+      for (unsigned childs = 0; childs < children.size(); childs++) {
+        endModuleDebugWith(M, children[childs]);
+      }
       DD->endModule();
     }
     delete DD; DD = 0;
@@ -945,6 +998,9 @@ bool AsmPrinter::doFinalization(Module &M) {
 
   // Allow the target to emit any magic that it wants at the end of the file,
   // after everything else has gone out.
+  for (unsigned childs = 0; childs < children.size(); childs++) {
+    emitEndOfAsmFileWith(M, children[childs]);
+  }
   EmitEndOfAsmFile(M);
 
   delete Mang; Mang = 0;
@@ -956,14 +1012,63 @@ bool AsmPrinter::doFinalization(Module &M) {
   return false;
 }
 
-void AsmPrinter::SetupMachineFunction(MachineFunction &MF) {
+void AsmPrinter::SwapContextWith(AsmPrinter *childAsm) {
+  if (!childAsm) return;
+
+  MachineModuleInfo *backupMMI = MMI;
+  MMI = childAsm->MMI;
+  if (DD) {
+    DD->ReplaceMMInfo(MMI);
+  }
+  if (DE) {
+    DE->ReplaceMMInfo(MMI);
+  }
+  childAsm->MMI = backupMMI;
+}
+
+static sys::CondSmartMutex asmPrinterMutex;
+
+/// help another asmPrinter to execute runOnMachineFunction on delegation
+bool AsmPrinter::delegateRunOnMachineFunctionFor(MachineFunction &MF, AsmPrinter *childAsm) {
+  sys::CondScopedLock locked(asmPrinterMutex);
+
+  if (llvm_is_multithreaded()) {
+    OutStreamer.setCurrFunc(MF.getFunctionNumber());
+  }
+
+  SetupMachineFunction(MF, childAsm);
+
+  SwapContextWith(childAsm);
+  EmitFunctionHeader();
+  EmitFunctionBody();
+  SwapContextWith(childAsm);
+
+  return false;
+}
+
+bool AsmPrinter::runOnMachineFunction(MachineFunction &MF) {
+  AsmPrinter *pAsm = static_cast<AsmPrinter*>(pPass);
+  if (pAsm) {
+    /// for parallel compilation, asmPrinter is shared,
+    /// the main/parent asmPrinter will help to execute runOnMachineFunction on delegation
+    return pAsm->delegateRunOnMachineFunctionFor(MF, this);
+  }
+  return delegateRunOnMachineFunctionFor(MF, NULL);
+}
+
+void AsmPrinter::SetupMachineFunction(MachineFunction &MF, AsmPrinter *childAsm) {
   this->MF = &MF;
   // Get the function symbol.
   CurrentFnSym = Mang->getSymbol(MF.getFunction());
   CurrentFnSymForSize = CurrentFnSym;
 
-  if (isVerbose())
-    LI = &getAnalysis<MachineLoopInfo>();
+  if (isVerbose()) {
+    if (childAsm) {
+      LI = &childAsm->getAnalysis<MachineLoopInfo>();
+    } else {
+      LI = &getAnalysis<MachineLoopInfo>();
+    }
+  }
 }
 
 namespace {

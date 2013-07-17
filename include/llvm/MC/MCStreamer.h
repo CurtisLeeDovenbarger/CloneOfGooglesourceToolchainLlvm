@@ -118,6 +118,8 @@ namespace llvm {
     ///
     virtual void reset();
 
+    virtual void setCurrFunc(int func) {}
+
     MCContext &getContext() const { return Context; }
 
     unsigned getNumFrameInfos() {

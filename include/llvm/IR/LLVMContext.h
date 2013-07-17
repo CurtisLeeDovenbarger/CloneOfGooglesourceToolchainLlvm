@@ -93,6 +93,10 @@ public:
   void emitError(const Twine &ErrorStr);
 
 private:
+  int GVID;
+public:
+  int GVCounter() { return GVID++; }
+private:
   LLVMContext(LLVMContext&) LLVM_DELETED_FUNCTION;
   void operator=(LLVMContext&) LLVM_DELETED_FUNCTION;
 
