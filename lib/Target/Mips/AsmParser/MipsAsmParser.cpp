@@ -1405,19 +1405,27 @@ MipsAsmParser::parseCCRRegs(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
   Parser.Lex(); // Eat the '$'
 
   const AsmToken &Tok = Parser.getTok(); // Get next token.
+  unsigned CCR;
   if (Tok.is(AsmToken::Integer)) {
     RegNum = Tok.getIntVal();
-    // At the moment only fcc0 is supported.
-    if (RegNum != 0)
+    if (RegNum == 0) {
+      CCR = Mips::FCC0;
+    } else if (RegNum == 31) {
+      CCR = Mips::FCR31;
+    } else {
       return MatchOperand_ParseFail;
+    }
   } else if (Tok.is(AsmToken::Identifier)) {
-    // At the moment only fcc0 is supported.
-    if (Tok.getIdentifier() != "fcc0")
+    if (Tok.getIdentifier() == "fcc0") {
+      CCR = Mips::FCC0;
+    } else {
       return MatchOperand_ParseFail;
-  } else
+    }
+  } else {
     return MatchOperand_NoMatch;
+  }
 
-  MipsOperand *op = MipsOperand::CreateReg(Mips::FCC0, S,
+  MipsOperand *op = MipsOperand::CreateReg(CCR, S,
                                            Parser.getTok().getLoc());
   op->setRegKind(MipsOperand::Kind_CCRRegs);
   Operands.push_back(op);
