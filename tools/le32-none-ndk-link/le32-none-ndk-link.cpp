@@ -105,6 +105,7 @@ static cl::opt<std::string> CO5("dynamic-linker",
   cl::desc("Compatibility option: ignored"));
 
 static cl::opt<bool> CO6("gc-sections",
+  cl::ZeroOrMore,
   cl::desc("Compatibility option: ignored"));
 
 static cl::list<std::string> CO7("B", cl::Prefix,
