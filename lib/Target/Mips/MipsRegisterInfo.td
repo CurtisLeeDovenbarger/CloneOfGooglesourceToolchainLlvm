@@ -248,9 +248,8 @@ let Namespace = "Mips" in {
   def LO64  : RegisterWithSubRegs<"lo", [LO]>;
   }
 
-  // FP control registers.
-  foreach I = 0-31 in
-  def FCR#I : MipsReg<#I, ""#I>;
+  // Status flags register
+  def FCR31 : Register<"31">;
 
   // fcc0 register
   def FCC0 : MipsReg<0, "fcc0">;
@@ -358,12 +357,8 @@ def AFGR64 : RegisterClass<"Mips", [f64], 64, (add
 
 def FGR64 : RegisterClass<"Mips", [f64], 64, (sequence "D%u_64", 0, 31)>;
 
-// FP control registers.
-def CCR : RegisterClass<"Mips", [i32], 32, (sequence "FCR%u", 0, 31)>,
-          Unallocatable;
-
-// FP condition code registers.
-def FCC : RegisterClass<"Mips", [i32], 32, (add FCC0)>, Unallocatable;
+// Condition Register for floating point operations
+def CCR  : RegisterClass<"Mips", [i32], 32, (add FCR31,FCC0)>, Unallocatable;
 
 // Hi/Lo Registers
 def LORegs : RegisterClass<"Mips", [i32], 32, (add LO)>;
