@@ -4600,11 +4600,44 @@ parseFPImm(SmallVectorImpl<MCParsedAsmOperand*> &Operands) {
   return MatchOperand_ParseFail;
 }
 
+static const uint16_t GPRDecoderTable[] = {
+  ARM::R0, ARM::R1, ARM::R2, ARM::R3,
+  ARM::R4, ARM::R5, ARM::R6, ARM::R7,
+  ARM::R8, ARM::R9, ARM::R10, ARM::R11,
+  ARM::R12, ARM::SP, ARM::LR, ARM::PC
+};
+
 /// Parse a arm instruction operand.  For now this parses the operand regardless
 /// of the mnemonic.
 bool ARMAsmParser::parseOperand(SmallVectorImpl<MCParsedAsmOperand*> &Operands,
                                 StringRef Mnemonic) {
   SMLoc S, E;
+
+  // FIXME: Workaround for the LDRD/STRD abbreviated syntax.
+  // Before parse the 4th operand (memory), expend the abbreviated syntax for LDRD/STRD.
+  if (Operands.size() == 3 &&
+      (Mnemonic == "ldrd" || Mnemonic == "strd")) {
+    unsigned Idx = 2;
+    ARMOperand* Op1 = static_cast<ARMOperand*>(Operands[Idx]);
+
+    unsigned RegClassID = isThumb() ? ARM::rGPRRegClassID : ARM::GPRRegClassID;
+    const MCRegisterClass& MRC = MRI->getRegClass(RegClassID);
+
+    // Left bracket, not Rt2.
+    if (getLexer().is(AsmToken::LBrac)) {
+      assert(Op1->isReg() && MRC.contains(Op1->getReg()));
+      unsigned Reg1 = Op1->getReg();
+      unsigned Rt = MRI->getEncodingValue(Reg1);
+      assert(!(Rt & 1) && "Rt must be even");
+
+      unsigned Rt2 = Rt + 1;
+      unsigned Reg2 = GPRDecoderTable[Rt2];
+      assert(MRC.contains(Reg2));
+
+      Operands.insert(Operands.begin() + Idx + 1, ARMOperand::CreateReg(
+            Reg2, Op1->getEndLoc(), getLexer().getLoc()));
+    }
+  }
 
   // Check if the current operand has a custom associated parser, if so, try to
   // custom parse the operand, or fallback to the general approach.
