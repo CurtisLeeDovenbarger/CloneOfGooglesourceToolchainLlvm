@@ -948,10 +948,15 @@ case "$withval" in
   default) EXTRA_OPTIONS= ;;
   *) EXTRA_OPTIONS=$withval ;;
 esac
-if test "$LLVM_CROSS_COMPILING" = "1"; then
-  # For binary size reduction
-  EXTRA_OPTIONS="$EXTRA_OPTIONS -fdata-sections -ffunction-sections -fvisibility-inlines-hidden"
-fi
+
+dnl Compiler flags for binary size reduction
+AC_MSG_CHECKING([binary size reduction compiler flags])
+CXX_FLAG_CHECK(DATA_SECTIONS, [-fdata-sections])
+CXX_FLAG_CHECK(FUNCTION_SECTIONS, [-ffunction-sections])
+CXX_FLAG_CHECK(VISIBILITY_INLINES_HIDDEN, [-fvisibility-inlines-hidden])
+
+EXTRA_OPTIONS="$EXTRA_OPTIONS $DATA_SECTIONS $FUNCTION_SECTIONS $VISIBILITY_INLINES_HIDDEN"
+
 AC_SUBST(EXTRA_OPTIONS,$EXTRA_OPTIONS)
 
 dnl Specify extra linker build options
@@ -963,10 +968,12 @@ case "$withval" in
   default) EXTRA_LD_OPTIONS= ;;
   *) EXTRA_LD_OPTIONS=$withval ;;
 esac
-if test "$LLVM_CROSS_COMPILING" = "1"; then
-  # Cooperative with -ffunction-sections, -fdata-sections
-  EXTRA_LD_OPTIONS="$EXTRA_LD_OPTIONS -Wl,--gc-sections"
-fi
+
+dnl Linker flags for binary size reduction (cooperative with -ffunction-sections, -fdata-sections)
+AC_MSG_CHECKING([binary size reduction linker flags])
+AC_LINK_USE_GC_SECTIONS([GC_SECTIONS])
+EXTRA_LD_OPTIONS="$EXTRA_LD_OPTIONS $GC_SECTIONS"
+
 AC_SUBST(EXTRA_LD_OPTIONS,$EXTRA_LD_OPTIONS)
 
 dnl Allow specific bindings to be specified for building (or not)
