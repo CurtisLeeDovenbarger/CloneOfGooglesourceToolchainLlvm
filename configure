@@ -710,6 +710,7 @@ LLVM_ENUM_TARGETS
 LLVM_ENUM_ASM_PRINTERS
 LLVM_ENUM_ASM_PARSERS
 LLVM_ENUM_DISASSEMBLERS
+ENABLE_SHRINK_BINARY_SIZE
 OPTIMIZE_OPTION
 DATA_SECTIONS
 FUNCTION_SECTIONS
@@ -1438,6 +1439,8 @@ Optional Features:
   --enable-experimental-targets
                           Build experimental host targets: disable or
                           target1,target2,... (default=disable)
+  --enable-shrink-binary-size
+                          Shrink LLVM toolchain size (default is NO)
   --enable-bindings       Build specific language bindings:
                           all,auto,none,{binding-name} (default=auto)
   --enable-libffi         Check for the presence of libffi (default is NO)
@@ -5565,6 +5568,22 @@ done
 
 
 
+# Check whether --enable-shrink-binary-size was given.
+if test "${enable_shrink_binary_size+set}" = set; then
+  enableval=$enable_shrink_binary_size;
+else
+  enableval="no"
+fi
+
+
+if test ${enableval} = "no" ; then
+  ENABLE_SHRINK_BINARY_SIZE=0
+
+else
+  ENABLE_SHRINK_BINARY_SIZE=1
+
+fi
+
 
 # Check whether --with-optimize-option was given.
 if test "${with_optimize_option+set}" = set; then
@@ -5584,7 +5603,8 @@ case "$withval" in
     esac ;;
   *) optimize_option="$withval" ;;
 esac
-if test "$LLVM_CROSS_COMPILING" = "1"; then
+
+if test "$ENABLE_SHRINK_BINARY_SIZE" = "1"; then
   optimize_option="$optimize_option -Os"
 fi
 OPTIMIZE_OPTION=$optimize_option
@@ -5614,7 +5634,9 @@ FUNCTION_SECTIONS=`$CXX -Werror -ffunction-sections -fsyntax-only -xc /dev/null 
 VISIBILITY_INLINES_HIDDEN=`$CXX -Werror -fvisibility-inlines-hidden -fsyntax-only -xc /dev/null 2>/dev/null && echo -fvisibility-inlines-hidden`
 
 
-EXTRA_OPTIONS="$EXTRA_OPTIONS $DATA_SECTIONS $FUNCTION_SECTIONS $VISIBILITY_INLINES_HIDDEN"
+if test "$ENABLE_SHRINK_BINARY_SIZE" = "1"; then
+  EXTRA_OPTIONS="$EXTRA_OPTIONS $DATA_SECTIONS $FUNCTION_SECTIONS $VISIBILITY_INLINES_HIDDEN"
+fi
 
 EXTRA_OPTIONS=$EXTRA_OPTIONS
 
@@ -5723,6 +5745,10 @@ if test "$llvm_cv_link_use_gc_sections" = yes ; then
   fi
 
 EXTRA_LD_OPTIONS="$EXTRA_LD_OPTIONS $GC_SECTIONS"
+
+if test "$ENABLE_SHRINK_BINARY_SIZE" = "1" ; then
+  EXTRA_LD_OPTIONS="$EXTRA_LD_OPTIONS $GC_SECTIONS"
+fi
 
 EXTRA_LD_OPTIONS=$EXTRA_LD_OPTIONS
 
@@ -10435,7 +10461,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<EOF
-#line 10438 "configure"
+#line 10464 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -22533,6 +22559,7 @@ LLVM_ENUM_TARGETS!$LLVM_ENUM_TARGETS$ac_delim
 LLVM_ENUM_ASM_PRINTERS!$LLVM_ENUM_ASM_PRINTERS$ac_delim
 LLVM_ENUM_ASM_PARSERS!$LLVM_ENUM_ASM_PARSERS$ac_delim
 LLVM_ENUM_DISASSEMBLERS!$LLVM_ENUM_DISASSEMBLERS$ac_delim
+ENABLE_SHRINK_BINARY_SIZE!$ENABLE_SHRINK_BINARY_SIZE$ac_delim
 OPTIMIZE_OPTION!$OPTIMIZE_OPTION$ac_delim
 DATA_SECTIONS!$DATA_SECTIONS$ac_delim
 FUNCTION_SECTIONS!$FUNCTION_SECTIONS$ac_delim
@@ -22618,7 +22645,6 @@ ALL_BINDINGS!$ALL_BINDINGS$ac_delim
 OCAML_LIBDIR!$OCAML_LIBDIR$ac_delim
 ENABLE_VISIBILITY_INLINES_HIDDEN!$ENABLE_VISIBILITY_INLINES_HIDDEN$ac_delim
 RPATH!$RPATH$ac_delim
-RDYNAMIC!$RDYNAMIC$ac_delim
 _ACEOF
 
   if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 97; then
@@ -22660,12 +22686,13 @@ _ACEOF
 ac_delim='%!_!# '
 for ac_last_try in false false false false false :; do
   cat >conf$$subs.sed <<_ACEOF
+RDYNAMIC!$RDYNAMIC$ac_delim
 program_prefix!$program_prefix$ac_delim
 LIBOBJS!$LIBOBJS$ac_delim
 LTLIBOBJS!$LTLIBOBJS$ac_delim
 _ACEOF
 
-  if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 3; then
+  if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 4; then
     break
   elif $ac_last_try; then
     { { echo "$as_me:$LINENO: error: could not make $CONFIG_STATUS" >&5
