@@ -119,6 +119,10 @@ static cl::list<bool> CO8("start-group",
 static cl::list<bool> CO9("end-group",
   cl::desc("Compatibility option: ignored"));
 
+static cl::opt<bool> CO10("eh-frame-hdr",
+  cl::ZeroOrMore,
+  cl::desc("Compatibility option: ignored"));
+
 static std::vector<std::string> DepLibs;
 
 static std::string progname;
