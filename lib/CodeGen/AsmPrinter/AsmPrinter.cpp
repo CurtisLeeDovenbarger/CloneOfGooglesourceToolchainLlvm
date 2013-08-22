@@ -2069,7 +2069,7 @@ void AsmPrinter::EmitBasicBlockStart(const MachineBasicBlock *MBB) const {
                               Twine(MBB->getNumber()) + ":");
     }
   } else {
-    OutStreamer.EmitLabel(MBB->getSymbol());
+    OutStreamer.EmitTextLabel(MBB->getSymbol());
   }
 }
 
