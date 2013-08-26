@@ -25,7 +25,7 @@ AC_DEFUN([AC_LINK_GET_VERSION],
 # This macro is specific to LLVM.
 #
 AC_DEFUN([AC_LINK_USE_GC_SECTIONS],
-[AC_CACHE_CHECK([for compiler -Wl,-R<path> option],[llvm_cv_link_use_gc_sections],
+[AC_CACHE_CHECK([for compiler -Wl,--gc-sections option],[llvm_cv_link_use_gc_sections],
 [ AC_LANG_PUSH([C])
   oldcflags="$CFLAGS"
   CFLAGS="$CFLAGS -Wl,--gc-sections"

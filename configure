@@ -5656,7 +5656,7 @@ esac
 
 { echo "$as_me:$LINENO: checking binary size reduction linker flags" >&5
 echo $ECHO_N "checking binary size reduction linker flags... $ECHO_C" >&6; }
-{ echo "$as_me:$LINENO: checking for compiler -Wl,-R<path> option" >&5
+{ echo "$as_me:$LINENO: checking for compiler -Wl,--gc-sections option" >&5
 echo $ECHO_N "checking for compiler -Wl,-R<path> option... $ECHO_C" >&6; }
 if test "${llvm_cv_link_use_gc_sections+set}" = set; then
   echo $ECHO_N "(cached) $ECHO_C" >&6
