@@ -231,16 +231,10 @@ def locate_tools():
     global HOST_TAG, NDK, LLVM_VERSION, ABI, LD
     global TRANSLATE_CMD, LLC_CMD, LD_CMD, AS_CMD
 
-    if sys.platform.startswith('linux'):
-        HOST_TAG='linux-x86'
-    elif sys.platform.startswith('darwin'):
-        HOST_TAG='darwin-x86'
-    elif sys.platform.startswith('win'):
-        HOST_TAG='windows'
-    else:
-        HOST_TAG='UNKNOWN'
-
     pwd = os.path.abspath(os.path.dirname(sys.argv[0]))
+    # pwd is in /path/HOST_TAG/bin: the 1st split drops "bin", the 2nd split keeps HOST_TAG
+    HOST_TAG = os.path.split(os.path.split(pwd)[0])[1]
+
     llvm_bin = llvm_bin_path(NDK, HOST_TAG, LLVM_VERSION)
     arch = get_arch_for_abi(ABI)
     gcc_bin = gcc_toolchain_for_arch(arch) + '/bin/'
