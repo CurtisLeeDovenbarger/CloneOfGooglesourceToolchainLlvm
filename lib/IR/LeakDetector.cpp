@@ -26,6 +26,7 @@ static ManagedStatic<LeakDetectorImpl<void> > Objects;
 
 static void clearGarbage(LLVMContext &Context) {
   Objects->clear();
+  sys::CondScopedLock locked(Context.pImpl->mutexLLVMObjects);
   Context.pImpl->LLVMObjects.clear();
 }
 
@@ -36,6 +37,7 @@ void LeakDetector::addGarbageObjectImpl(void *Object) {
 
 void LeakDetector::addGarbageObjectImpl(const Value *Object) {
   LLVMContextImpl *pImpl = Object->getContext().pImpl;
+  sys::CondScopedLock locked(pImpl->mutexLLVMObjects);
   pImpl->LLVMObjects.addGarbage(Object);
 }
 
@@ -46,6 +48,7 @@ void LeakDetector::removeGarbageObjectImpl(void *Object) {
 
 void LeakDetector::removeGarbageObjectImpl(const Value *Object) {
   LLVMContextImpl *pImpl = Object->getContext().pImpl;
+  sys::CondScopedLock locked(pImpl->mutexLLVMObjects);
   pImpl->LLVMObjects.removeGarbage(Object);
 }
 

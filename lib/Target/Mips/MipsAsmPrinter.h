@@ -55,7 +55,7 @@ public:
     return "Mips Assembly Printer";
   }
 
-  virtual bool runOnMachineFunction(MachineFunction &MF);
+  virtual bool delegateRunOnMachineFunctionFor(MachineFunction &MF, AsmPrinter *childAsm);
 
   void EmitInstruction(const MachineInstr *MI);
   void printSavedRegsBitmask(raw_ostream &O);

@@ -197,9 +197,12 @@ void Mangler::getNameWithPrefix(SmallVectorImpl<char> &OutName,
   } else {
     // Get the ID for the global, assigning a new one if we haven't got one
     // already.
-    unsigned &ID = AnonGlobalIDs[GV];
-    if (ID == 0) ID = NextAnonGlobalID++;
-  
+    //unsigned &ID = AnonGlobalIDs[GV];
+    //if (ID == 0) ID = NextAnonGlobalID++;
+
+    // For parallel compilation, to make the generated binary stable,
+    // number global variable at the beginning.
+    unsigned ID = GV->getGVID();
     // Must mangle the global into a unique ID.
     getNameWithPrefix(OutName, "__unnamed_" + Twine(ID), PrefixTy);
   }

@@ -164,7 +164,10 @@ class MachineModuleInfo : public ImmutablePass {
   /// floating-point arguments.  This is used to emit an undefined reference
   /// to _fltused on Windows targets.
   bool UsesVAFloatArgument;
-
+private:
+  MachineModuleInfo *pMMI;
+public:
+  void setParent(MachineModuleInfo *parent) { pMMI = parent; }
 public:
   static char ID; // Pass identification, replacement for typeid
 

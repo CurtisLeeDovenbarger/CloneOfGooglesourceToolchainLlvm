@@ -96,6 +96,8 @@ namespace llvm {
     MCSymbol *CurrentFnSymForSize;
 
   private:
+    SmallVector<AsmPrinter*, 4> children;
+
     // GCMetadataPrinters - The garbage collection metadata printer table.
     void *GCMetadataPrinters;  // Really a DenseMap.
 
@@ -117,6 +119,12 @@ namespace llvm {
 
   protected:
     explicit AsmPrinter(TargetMachine &TM, MCStreamer &Streamer);
+  protected:
+    /// In parallel compilation, the main/parent asmPrinter will help child asmPrinter
+    /// to run some activities on delegation, which need take some context from child asmPrinter.
+    /// After that, the context should be restored.
+    /// This function exchagne the context between parent asmPrinter and child asmPrinter
+    void SwapContextWith(AsmPrinter *childAsm);
 
   public:
     virtual ~AsmPrinter();
@@ -161,12 +169,10 @@ namespace llvm {
 
     /// runOnMachineFunction - Emit the specified function out to the
     /// OutStreamer.
-    virtual bool runOnMachineFunction(MachineFunction &MF) {
-      SetupMachineFunction(MF);
-      EmitFunctionHeader();
-      EmitFunctionBody();
-      return false;
-    }
+    bool runOnMachineFunction(MachineFunction &MF);
+
+    /// help another asmPrinter to execute runOnMachineFunction on delegation
+    virtual bool delegateRunOnMachineFunctionFor(MachineFunction &MF, AsmPrinter *childAsm);
 
     //===------------------------------------------------------------------===//
     // Coarse grained IR lowering routines.
@@ -174,7 +180,7 @@ namespace llvm {
 
     /// SetupMachineFunction - This should be called when a new MachineFunction
     /// is being processed from runOnMachineFunction.
-    void SetupMachineFunction(MachineFunction &MF);
+    void SetupMachineFunction(MachineFunction &MF, AsmPrinter *childAsm);
 
     /// EmitFunctionHeader - This method emits the header for the current
     /// function.
@@ -461,6 +467,15 @@ namespace llvm {
     mutable unsigned LastFn;
     mutable unsigned Counter;
     mutable unsigned SetCounter;
+
+    /// For parallel compilation, the end module operation for DD will be done by another AsmPrinter
+    void endModuleDebugWith(Module &M, AsmPrinter *childAsm);
+
+    /// For parallel compilation, the end module operation for DE will be done by another AsmPrinter
+    void endModuleExceptionWith(Module &M, AsmPrinter *childAsm);
+
+    /// For parallel compilation, the end module operation will be done by another AsmPrinter
+    void emitEndOfAsmFileWith(Module &M, AsmPrinter *childAsm);
 
     /// EmitInlineAsm - Emit a blob of inline asm to the output streamer.
     void EmitInlineAsm(StringRef Str, const MDNode *LocMDNode = 0,

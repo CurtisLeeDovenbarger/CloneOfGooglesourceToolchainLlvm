@@ -70,11 +70,7 @@ public:
     if (isValid(VP.getPointer()))
       AddToUseList();
   }
-  ValueHandleBase(HandleBaseKind Kind, const ValueHandleBase &RHS)
-    : PrevPair(0, Kind), Next(0), VP(RHS.VP) {
-    if (isValid(VP.getPointer()))
-      AddToExistingUseList(RHS.getPrevPtr());
-  }
+  ValueHandleBase(HandleBaseKind Kind, const ValueHandleBase &RHS);
   ~ValueHandleBase() {
     if (isValid(VP.getPointer()))
       RemoveFromUseList();
@@ -88,13 +84,7 @@ public:
     return RHS;
   }
 
-  Value *operator=(const ValueHandleBase &RHS) {
-    if (VP.getPointer() == RHS.VP.getPointer()) return RHS.VP.getPointer();
-    if (isValid(VP.getPointer())) RemoveFromUseList();
-    VP.setPointer(RHS.VP.getPointer());
-    if (isValid(VP.getPointer())) AddToExistingUseList(RHS.getPrevPtr());
-    return VP.getPointer();
-  }
+  Value *operator=(const ValueHandleBase &RHS);
 
   Value *operator->() const { return getValPtr(); }
   Value &operator*() const { return *getValPtr(); }
@@ -105,7 +95,7 @@ protected:
   void setValPtrInt(unsigned K) { VP.setInt(K); }
   unsigned getValPtrInt() const { return VP.getInt(); }
 
-  void setKind(HandleBaseKind K) { PrevPair.setInt(K); }
+  void setKind(HandleBaseKind K);
 
   static bool isValid(Value *V) {
     return V &&
@@ -127,16 +117,16 @@ private:
   /// AddToExistingUseList - Add this ValueHandle to the use list for VP, where
   /// List is the address of either the head of the list or a Next node within
   /// the existing use list.
-  void AddToExistingUseList(ValueHandleBase **List);
+  void AddToExistingUseList(ValueHandleBase **List, bool blLock = true);
 
   /// AddToExistingUseListAfter - Add this ValueHandle to the use list after
   /// Node.
-  void AddToExistingUseListAfter(ValueHandleBase *Node);
+  void AddToExistingUseListAfter(ValueHandleBase *Node, bool blLock = true);
 
   /// AddToUseList - Add this ValueHandle to the use list for VP.
   void AddToUseList();
   /// RemoveFromUseList - Remove this ValueHandle from its current use list.
-  void RemoveFromUseList();
+  void RemoveFromUseList(bool blLock = true);
 };
 
 /// WeakVH - This is a value handle that tries hard to point to a Value, even

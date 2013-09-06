@@ -25,7 +25,7 @@ public:
   explicit AMDGPUAsmPrinter(TargetMachine &TM, MCStreamer &Streamer)
     : AsmPrinter(TM, Streamer) { }
 
-  virtual bool runOnMachineFunction(MachineFunction &MF);
+  virtual bool delegateRunOnMachineFunctionFor(MachineFunction &MF, AsmPrinter *childAsm);
 
   virtual const char *getPassName() const {
     return "AMDGPU Assembly Printer";

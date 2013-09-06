@@ -37,6 +37,7 @@ MDString::MDString(LLVMContext &C)
 
 MDString *MDString::get(LLVMContext &Context, StringRef Str) {
   LLVMContextImpl *pImpl = Context.pImpl;
+  sys::CondScopedLock locked(pImpl->mutexMDStringCache);
   StringMapEntry<Value*> &Entry =
     pImpl->MDStringCache.GetOrCreateValue(Str);
   Value *&S = Entry.getValue();
@@ -133,8 +134,10 @@ MDNode::~MDNode() {
          "Not being destroyed through destroy()?");
   LLVMContextImpl *pImpl = getType()->getContext().pImpl;
   if (isNotUniqued()) {
+    sys::CondScopedLock locked(pImpl->mutexNonUniquedMDNodes);
     pImpl->NonUniquedMDNodes.erase(this);
   } else {
+    sys::CondScopedLock locked(pImpl->mutexMDNodeSet);
     pImpl->MDNodeSet.RemoveNode(this);
   }
 
@@ -225,8 +228,11 @@ MDNode *MDNode::getMDNode(LLVMContext &Context, ArrayRef<Value*> Vals,
     ID.AddPointer(Vals[i]);
 
   void *InsertPoint;
-  MDNode *N = pImpl->MDNodeSet.FindNodeOrInsertPos(ID, InsertPoint);
-
+  MDNode *N;
+  {
+  sys::CondScopedLock locked(pImpl->mutexMDNodeSet);
+  N = pImpl->MDNodeSet.FindNodeOrInsertPos(ID, InsertPoint);
+  }
   if (N || !Insert)
     return N;
 
@@ -256,10 +262,11 @@ MDNode *MDNode::getMDNode(LLVMContext &Context, ArrayRef<Value*> Vals,
 
   // Cache the operand hash.
   N->Hash = ID.ComputeHash();
-
+  {
+  sys::CondScopedLock locked(pImpl->mutexMDNodeSet);
   // InsertPoint will have been set by the FindNodeOrInsertPos call.
   pImpl->MDNodeSet.InsertNode(N, InsertPoint);
-
+  }
   return N;
 }
 
@@ -289,10 +296,16 @@ MDNode *MDNode::getTemporary(LLVMContext &Context, ArrayRef<Value*> Vals) {
 
 void MDNode::deleteTemporary(MDNode *N) {
   assert(N->use_empty() && "Temporary MDNode has uses!");
+  {
+  sys::CondScopedLock locked(N->getContext().pImpl->mutexMDNodeSet);
   assert(!N->getContext().pImpl->MDNodeSet.RemoveNode(N) &&
          "Deleting a non-temporary uniqued node!");
+  }
+  {
+  sys::CondScopedLock locked(N->getContext().pImpl->mutexNonUniquedMDNodes);
   assert(!N->getContext().pImpl->NonUniquedMDNodes.erase(N) &&
          "Deleting a non-temporary non-uniqued node!");
+  }
   assert((N->getSubclassDataFromValue() & NotUniquedBit) &&
          "Temporary MDNode does not have NotUniquedBit set!");
   assert((N->getSubclassDataFromValue() & DestroyFlag) == 0 &&
@@ -319,6 +332,7 @@ void MDNode::Profile(FoldingSetNodeID &ID) const {
 void MDNode::setIsNotUniqued() {
   setValueSubclassData(getSubclassDataFromValue() | NotUniquedBit);
   LLVMContextImpl *pImpl = getType()->getContext().pImpl;
+  sys::CondScopedLock locked(pImpl->mutexNonUniquedMDNodes);
   pImpl->NonUniquedMDNodes.insert(this);
 }
 
@@ -356,10 +370,12 @@ void MDNode::replaceOperand(MDNodeOperand *Op, Value *To) {
 
   LLVMContextImpl *pImpl = getType()->getContext().pImpl;
 
+  {
+  sys::CondScopedLock locked(pImpl->mutexMDNodeSet);
   // Remove "this" from the context map.  FoldingSet doesn't have to reprofile
   // this node to remove it, so we don't care what state the operands are in.
   pImpl->MDNodeSet.RemoveNode(this);
-
+  }
   // If we are dropping an argument to null, we choose to not unique the MDNode
   // anymore.  This commonly occurs during destruction, and uniquing these
   // brings little reuse.  Also, this means we don't need to include
@@ -375,17 +391,21 @@ void MDNode::replaceOperand(MDNodeOperand *Op, Value *To) {
   FoldingSetNodeID ID;
   Profile(ID);
   void *InsertPoint;
+  {
+  sys::CondScopedLock locked(pImpl->mutexMDNodeSet);
   if (MDNode *N = pImpl->MDNodeSet.FindNodeOrInsertPos(ID, InsertPoint)) {
     replaceAllUsesWith(N);
     destroy();
     return;
   }
-
+  }
   // Cache the operand hash.
   Hash = ID.ComputeHash();
+  {
+  sys::CondScopedLock locked(pImpl->mutexMDNodeSet);
   // InsertPoint will have been set by the FindNodeOrInsertPos call.
   pImpl->MDNodeSet.InsertNode(this, InsertPoint);
-
+  }
   // If this MDValue was previously function-local but no longer is, clear
   // its function-local flag.
   if (isFunctionLocal() && !isFunctionLocalValue(To)) {
@@ -595,6 +615,7 @@ void Instruction::setMetadata(unsigned KindID, MDNode *Node) {
   
   // Handle the case when we're adding/updating metadata on an instruction.
   if (Node) {
+    sys::CondScopedLock locked(getContext().pImpl->mutexMetadataStore);
     LLVMContextImpl::MDMapTy &Info = getContext().pImpl->MetadataStore[this];
     assert(!Info.empty() == hasMetadataHashEntry() &&
            "HasMetadata bit is wonked");
@@ -615,11 +636,16 @@ void Instruction::setMetadata(unsigned KindID, MDNode *Node) {
   }
 
   // Otherwise, we're removing metadata from an instruction.
+  {
+  sys::CondScopedLock locked(getContext().pImpl->mutexMetadataStore);
   assert((hasMetadataHashEntry() ==
           getContext().pImpl->MetadataStore.count(this)) &&
          "HasMetadata bit out of date!");
+  }
   if (!hasMetadataHashEntry())
     return;  // Nothing to remove!
+
+  sys::CondScopedLock locked(getContext().pImpl->mutexMetadataStore);
   LLVMContextImpl::MDMapTy &Info = getContext().pImpl->MetadataStore[this];
 
   // Common case is removing the only entry.
@@ -647,6 +673,7 @@ MDNode *Instruction::getMetadataImpl(unsigned KindID) const {
   
   if (!hasMetadataHashEntry()) return 0;
   
+  sys::CondScopedLock locked(getContext().pImpl->mutexMetadataStore);
   LLVMContextImpl::MDMapTy &Info = getContext().pImpl->MetadataStore[this];
   assert(!Info.empty() && "bit out of sync with hash table");
 
@@ -667,7 +694,7 @@ void Instruction::getAllMetadataImpl(SmallVectorImpl<std::pair<unsigned,
                                     DbgLoc.getAsMDNode(getContext())));
     if (!hasMetadataHashEntry()) return;
   }
-  
+  sys::CondScopedLock locked(getContext().pImpl->mutexMetadataStore);
   assert(hasMetadataHashEntry() &&
          getContext().pImpl->MetadataStore.count(this) &&
          "Shouldn't have called this");
@@ -686,6 +713,8 @@ void Instruction::
 getAllMetadataOtherThanDebugLocImpl(SmallVectorImpl<std::pair<unsigned,
                                     MDNode*> > &Result) const {
   Result.clear();
+  {
+  sys::CondScopedLock locked(getContext().pImpl->mutexMetadataStore);
   assert(hasMetadataHashEntry() &&
          getContext().pImpl->MetadataStore.count(this) &&
          "Shouldn't have called this");
@@ -693,7 +722,7 @@ getAllMetadataOtherThanDebugLocImpl(SmallVectorImpl<std::pair<unsigned,
     getContext().pImpl->MetadataStore.find(this)->second;
   assert(!Info.empty() && "Shouldn't have called this");
   Result.append(Info.begin(), Info.end());
-
+  }
   // Sort the resulting array so it is stable.
   if (Result.size() > 1)
     array_pod_sort(Result.begin(), Result.end());
@@ -703,7 +732,10 @@ getAllMetadataOtherThanDebugLocImpl(SmallVectorImpl<std::pair<unsigned,
 /// this instruction.
 void Instruction::clearMetadataHashEntries() {
   assert(hasMetadataHashEntry() && "Caller should check");
+  {
+  sys::CondScopedLock locked(getContext().pImpl->mutexMetadataStore);
   getContext().pImpl->MetadataStore.erase(this);
+  }
   setHasMetadataHashEntry(false);
 }
 

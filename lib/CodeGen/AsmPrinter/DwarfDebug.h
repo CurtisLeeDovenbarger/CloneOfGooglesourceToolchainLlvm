@@ -618,6 +618,8 @@ public:
   DwarfDebug(AsmPrinter *A, Module *M);
   ~DwarfDebug();
 
+  void ReplaceMMInfo(MachineModuleInfo *MMInfo) { MMI = MMInfo; }
+
   /// \brief Emit all Dwarf sections that should come prior to the
   /// content.
   void beginModule();

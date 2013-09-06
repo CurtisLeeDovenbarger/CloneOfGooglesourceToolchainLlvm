@@ -31,6 +31,7 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/Support/ValueHandle.h"
+#include "llvm/Support/Mutex.h"
 #include <vector>
 
 namespace llvm {
@@ -232,6 +233,44 @@ public:
   
 class LLVMContextImpl {
 public:
+  sys::CondSmartMutex mutexOwnedModules;
+  sys::CondSmartMutex mutexDiagHandler;
+  sys::CondSmartMutex mutexIntConstants;
+  sys::CondSmartMutex mutexFPConstants;
+  sys::CondSmartMutex mutexAttrsSet;
+  sys::CondSmartMutex mutexAttrsLists;
+  sys::CondSmartMutex mutexMDStringCache;
+  sys::CondSmartMutex mutexMDNodeSet;
+  sys::CondSmartMutex mutexNonUniquedMDNodes;
+  sys::CondSmartMutex mutexCAZConstants;
+  sys::CondSmartMutex mutexArrayConstants;
+  sys::CondSmartMutex mutexStructConstants;
+  sys::CondSmartMutex mutexVectorConstants;
+  sys::CondSmartMutex mutexCPNConstants;
+  sys::CondSmartMutex mutexUVConstants;
+  sys::CondSmartMutex mutexCDSConstants;
+  sys::CondSmartMutex mutexBlockAddresses;
+  sys::CondSmartMutex mutexExprConstants;
+  sys::CondSmartMutex mutexInlineAsms;
+  sys::CondSmartMutex mutexTheTrueVal;
+  sys::CondSmartMutex mutexTheFalseVal;
+  sys::CondSmartMutex mutexLLVMObjects;
+  sys::CondSmartMutex mutexTypeAllocator;
+  sys::CondSmartMutex mutexIntegerTypes;
+  sys::CondSmartMutex mutexFunctionTypes;
+  sys::CondSmartMutex mutexAnonStructTypes;
+  sys::CondSmartMutex mutexNamedStructTypes;
+  sys::CondSmartMutex mutexNamedStructTypesUniqueID;
+  sys::CondSmartMutex mutexArrayTypes;
+  sys::CondSmartMutex mutexVectorTypes;
+  sys::CondSmartMutex mutexPointerTypes;
+  sys::CondSmartMutex mutexASPointerTypes;
+  sys::CondSmartMutex mutexCustomMDKindNames;
+  sys::CondSmartMutex mutexMetadataStore;
+  sys::CondSmartMutex mutexScopeRecords;
+  sys::CondSmartMutex mutexScopeInlinedAtRecords;
+
+public:
   /// OwnedModules - The set of modules instantiated in this context, and which
   /// will be automatically deleted if this context is deleted.
   SmallPtrSet<Module*, 4> OwnedModules;
@@ -314,13 +353,6 @@ public:
   DenseMap<std::pair<Type *, unsigned>, VectorType*> VectorTypes;
   DenseMap<Type*, PointerType*> PointerTypes;  // Pointers in AddrSpace = 0
   DenseMap<std::pair<Type*, unsigned>, PointerType*> ASPointerTypes;
-
-
-  /// ValueHandles - This map keeps track of all of the value handles that are
-  /// watching a Value*.  The Value::HasValueHandle bit is used to know
-  /// whether or not a value has an entry in this map.
-  typedef DenseMap<Value*, ValueHandleBase*> ValueHandlesTy;
-  ValueHandlesTy ValueHandles;
   
   /// CustomMDKindNames - Map to hold the metadata string to ID mapping.
   StringMap<unsigned> CustomMDKindNames;

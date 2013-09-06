@@ -71,7 +71,7 @@ MachineFunction::MachineFunction(const Function *F, const TargetMachine &TM,
                                         Attribute::OptimizeForSize))
     Alignment = std::max(Alignment,
                          TM.getTargetLowering()->getPrefFunctionAlignment());
-  FunctionNumber = FunctionNum;
+  FunctionNumber = F->getSeq() < 0 ? FunctionNum : F->getSeq();
   JumpTableInfo = 0;
 }
 

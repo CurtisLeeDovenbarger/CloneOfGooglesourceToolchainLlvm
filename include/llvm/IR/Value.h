@@ -19,6 +19,7 @@
 #include "llvm/Support/CBindingWrapping.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm-c/Core.h"
+#include "llvm/Support/Mutex.h"
 
 namespace llvm {
 
@@ -62,7 +63,6 @@ class StringRef;
 /// @brief LLVM Value Representation
 class Value {
   const unsigned char SubclassID;   // Subclass identifier (for isa/dyn_cast)
-  unsigned char HasValueHandle : 1; // Has a ValueHandle pointing to this?
 protected:
   /// SubclassOptionalData - This member is similar to SubclassData, however it
   /// is for holding information which may be used to aid optimization, but
@@ -78,6 +78,8 @@ private:
 
   Type *VTy;
   Use *UseList;
+  /// Use VHList to replace ValueHandleList in MCContext
+  ValueHandleBase *VHList;
 
   friend class ValueSymbolTable; // Allow ValueSymbolTable to directly mod Name.
   friend class ValueHandleBase;
@@ -92,6 +94,12 @@ protected:
   virtual void printCustom(raw_ostream &O) const;
 
   Value(Type *Ty, unsigned scid);
+  /// For parallel compilation, global shared value should be locked since it is global
+  /// Each global shared value has it's own lock, will be generated as needed
+private:
+  sys::CondSmartMutex *useMutex;
+public:
+  sys::CondSmartMutex& getMutex();
 public:
   virtual ~Value();
 
@@ -215,9 +223,14 @@ public:
 
     // Markers:
     ConstantFirstVal = FunctionVal,
-    ConstantLastVal  = ConstantPointerNullVal
+    ConstantLastVal  = ConstantPointerNullVal,
+    SharedFirstVal = FunctionVal,
+    SharedLastVal  = MDStringVal
   };
 
+  bool isSharedValue() {
+    return SubclassID >= SharedFirstVal && SubclassID <= SharedLastVal;
+  }
   /// getValueID - Return an ID for the concrete type of this object.  This is
   /// used to implement the classof checks.  This should not be used for any
   /// other purpose, as the values may change as LLVM evolves.  Also, note that
@@ -258,7 +271,7 @@ public:
 
   /// hasValueHandle - Return true if there is a value handle associated with
   /// this value.
-  bool hasValueHandle() const { return HasValueHandle; }
+  bool hasValueHandle() const { return VHList != NULL; }
 
   /// \brief This method strips off any unneeded pointer casts,
   /// all-zero GEPs and aliases from the specified value, returning the original

@@ -137,7 +137,8 @@ void Module::getMDKindNames(SmallVectorImpl<StringRef> &Result) const {
 //
 Constant *Module::getOrInsertFunction(StringRef Name,
                                       FunctionType *Ty,
-                                      AttributeSet AttributeList) {
+                                      AttributeSet AttributeList, bool needLock) {
+  sys::CondScopedLock locked(mutexFunctions, needLock);
   // See if we have a definition for the specified function already.
   GlobalValue *F = getNamedValue(Name);
   if (F == 0) {
@@ -154,7 +155,7 @@ Constant *Module::getOrInsertFunction(StringRef Name,
     // Clear the function's name.
     F->setName("");
     // Retry, now there won't be a conflict.
-    Constant *NewF = getOrInsertFunction(Name, Ty);
+    Constant *NewF = getOrInsertFunction(Name, Ty, AttributeSet(), false);
     F->setName(Name);
     return NewF;
   }
@@ -171,6 +172,7 @@ Constant *Module::getOrInsertFunction(StringRef Name,
 Constant *Module::getOrInsertTargetIntrinsic(StringRef Name,
                                              FunctionType *Ty,
                                              AttributeSet AttributeList) {
+  sys::CondScopedLock locked(mutexFunctions);
   // See if we have a definition for the specified function already.
   GlobalValue *F = getNamedValue(Name);
   if (F == 0) {
@@ -266,6 +268,7 @@ GlobalVariable *Module::getGlobalVariable(StringRef Name,
 ///   3. Finally, if the existing global is the correct delclaration, return the
 ///      existing global.
 Constant *Module::getOrInsertGlobal(StringRef Name, Type *Ty) {
+  sys::CondScopedLock locked(mutexGV);
   // See if we have a definition for the specified global already.
   GlobalVariable *GV = dyn_cast_or_null<GlobalVariable>(getNamedValue(Name));
   if (GV == 0) {

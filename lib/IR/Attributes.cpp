@@ -38,6 +38,7 @@ Attribute Attribute::get(LLVMContext &Context, Attribute::AttrKind Kind,
   if (Val) ID.AddInteger(Val);
 
   void *InsertPoint;
+  sys::CondScopedLock locked(pImpl->mutexAttrsSet);
   AttributeImpl *PA = pImpl->AttrsSet.FindNodeOrInsertPos(ID, InsertPoint);
 
   if (!PA) {
@@ -539,6 +540,7 @@ AttributeSet::getImpl(LLVMContext &C,
   AttributeSetImpl::Profile(ID, Attrs);
 
   void *InsertPoint;
+  sys::CondScopedLock locked(pImpl->mutexAttrsLists);
   AttributeSetImpl *PA = pImpl->AttrsLists.FindNodeOrInsertPos(ID, InsertPoint);
 
   // If we didn't find any existing attributes of the same shape then

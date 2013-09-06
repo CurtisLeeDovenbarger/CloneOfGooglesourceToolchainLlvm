@@ -44,16 +44,24 @@ extern "C" void LLVMInitializeR600AsmPrinter() {
   TargetRegistry::RegisterAsmPrinter(TheAMDGPUTarget, createAMDGPUAsmPrinterPass);
 }
 
+static sys::CondSmartMutex amdGPUAsmPrinterMutex;
+/// help another asmPrinter to execute runOnMachineFunction on delegation
 /// We need to override this function so we can avoid
 /// the call to EmitFunctionHeader(), which the MCPureStreamer can't handle.
-bool AMDGPUAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
+bool AMDGPUAsmPrinter::delegateRunOnMachineFunctionFor(MachineFunction &MF, AsmPrinter *childAsm) {
+  sys::CondScopedLock locked(amdGPUAsmPrinterMutex);
+  if (llvm_is_multithreaded()) {
+    OutStreamer.setCurrFunc(MF.getFunctionNumber());
+  }
+
   const AMDGPUSubtarget &STM = TM.getSubtarget<AMDGPUSubtarget>();
   if (STM.dumpCode()) {
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
     MF.dump();
 #endif
   }
-  SetupMachineFunction(MF);
+  SetupMachineFunction(MF, childAsm);
+  SwapContextWith(childAsm);
   if (OutStreamer.hasRawTextSupport()) {
     OutStreamer.EmitRawText("@" + MF.getName() + ":");
   }
@@ -70,6 +78,7 @@ bool AMDGPUAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
   }
   OutStreamer.SwitchSection(getObjFileLowering().getTextSection());
   EmitFunctionBody();
+  SwapContextWith(childAsm);
   return false;
 }
 
