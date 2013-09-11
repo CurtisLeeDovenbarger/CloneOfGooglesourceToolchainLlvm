@@ -515,7 +515,7 @@ SDValue MipsSETargetLowering::lowerLOAD(SDValue Op, SelectionDAG &DAG) const {
     return MipsTargetLowering::lowerLOAD(Op, DAG);
 
   // Replace a double precision load with two i32 loads and a buildpair64.
-  SDLoc DL(Op);
+  DebugLoc DL = Op.getDebugLoc();
   SDValue Ptr = Nd.getBasePtr(), Chain = Nd.getChain();
   EVT PtrVT = Ptr.getValueType();
 
@@ -547,7 +547,7 @@ SDValue MipsSETargetLowering::lowerSTORE(SDValue Op, SelectionDAG &DAG) const {
     return MipsTargetLowering::lowerSTORE(Op, DAG);
 
   // Replace a double precision store with two extractelement64s and i32 stores.
-  SDLoc DL(Op);
+  DebugLoc DL = Op.getDebugLoc();
   SDValue Val = Nd.getValue(), Ptr = Nd.getBasePtr(), Chain = Nd.getChain();
   EVT PtrVT = Ptr.getValueType();
   SDValue Lo = DAG.getNode(MipsISD::ExtractElementF64, DL, MVT::i32,
