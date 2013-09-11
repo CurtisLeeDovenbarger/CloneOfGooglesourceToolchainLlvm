@@ -56,6 +56,9 @@ namespace llvm {
                 bool IsPICCall, bool GlobalOrExternal, bool InternalLinkage,
                 CallLoweringInfo &CLI, SDValue Callee, SDValue Chain) const;
 
+    SDValue lowerLOAD(SDValue Op, SelectionDAG &DAG) const;
+    SDValue lowerSTORE(SDValue Op, SelectionDAG &DAG) const;
+
     SDValue lowerMulDiv(SDValue Op, unsigned NewOpc, bool HasLo, bool HasHi,
                         SelectionDAG &DAG) const;
 

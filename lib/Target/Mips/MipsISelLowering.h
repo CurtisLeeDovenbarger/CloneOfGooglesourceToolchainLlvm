@@ -321,6 +321,10 @@ namespace llvm {
 
     bool HasMips64, IsN64, IsO32;
 
+  protected:
+    SDValue lowerLOAD(SDValue Op, SelectionDAG &DAG) const;
+    SDValue lowerSTORE(SDValue Op, SelectionDAG &DAG) const;
+
   private:
     // Lower Operand helpers
     SDValue LowerCallResult(SDValue Chain, SDValue InFlag,
@@ -351,8 +355,6 @@ namespace llvm {
     SDValue lowerShiftLeftParts(SDValue Op, SelectionDAG& DAG) const;
     SDValue lowerShiftRightParts(SDValue Op, SelectionDAG& DAG,
                                  bool IsSRA) const;
-    SDValue lowerLOAD(SDValue Op, SelectionDAG &DAG) const;
-    SDValue lowerSTORE(SDValue Op, SelectionDAG &DAG) const;
     SDValue lowerADD(SDValue Op, SelectionDAG &DAG) const;
 
     /// isEligibleForTailCallOptimization - Check whether the call is eligible
