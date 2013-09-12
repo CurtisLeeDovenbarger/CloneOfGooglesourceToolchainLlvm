@@ -17,6 +17,8 @@
 #ifndef ANDROID_BITCODE_LINKER_H
 #define ANDROID_BITCODE_LINKER_H
 
+#include <cstdio>
+#include <cstring>
 #include <string>
 #include <set>
 #include <vector>
@@ -53,6 +55,17 @@ class AndroidBitcodeItem {
         delete Wrapper;
 
       Wrapper = wrapper;
+      parseLDFlags(Wrapper->getLDFlags());
+    }
+
+    int getBitcodeType() {
+      if (Wrapper != 0)
+        return Wrapper->getBitcodeType();
+      return 0;
+    }
+
+    std::string getSOName() {
+      return SOName;
     }
 
     bool isWholeArchive() { return WholeArchive; }
@@ -61,12 +74,36 @@ class AndroidBitcodeItem {
 
     BitcodeWrapper* getWrapper() { return Wrapper; }
 
-   const sys::PathWithStatus& getFile() { return File; }
+    const sys::PathWithStatus& getFile() { return File; }
+
+  private:
+
+    void parseLDFlags(const std::string &ldflags) {
+      char* str = strdup(ldflags.c_str());
+      char* input;
+      std::vector<char *> inputs;
+      input = strtok (str, " ");
+
+      while (input != NULL) {
+        inputs.push_back(input);
+        input = strtok (NULL, " ");
+      }
+
+      for (unsigned i = 0; i < inputs.size(); i++) {
+        if (!strcmp(inputs[i],"-soname"))
+          SOName = inputs[i+1];
+        // if -lx
+        // push -lx to DepLibs
+      }
+      free(str);
+    }
 
   private:
     sys::PathWithStatus File;
     bool WholeArchive;
     bool NativeBinary;
+    std::string SOName;
+    std::vector<std::string> DepLibs;
     BitcodeWrapper *Wrapper;
 };
 
@@ -83,10 +120,10 @@ class LinkerConfig {
   public:
     LinkerConfig(LLVMContext& context, StringRef progname,
                  StringRef modulename, unsigned flags,
-                 bool disableopt, bool stripall, bool stripdebug) :
+                 bool disableopt, bool stripall, bool stripdebug, bool nativebinary) :
                  C(context), ProgName(progname), ModuleName(modulename),
                  Flags(flags), DisableOpt(disableopt), StripAll(stripall),
-                 StripDebug(stripdebug) {
+                 StripDebug(stripdebug), LinkNativeBinary(nativebinary) {
     }
 
     StringRef& getProgName() { return ProgName; }
@@ -103,6 +140,8 @@ class LinkerConfig {
 
     bool isStripDebug() { return StripDebug; }
 
+    bool isLinkNativeBinary() { return LinkNativeBinary; }
+
   private:
     LLVMContext &C;
     StringRef ProgName;
@@ -111,6 +150,7 @@ class LinkerConfig {
     bool DisableOpt;
     bool StripAll;
     bool StripDebug;
+    bool LinkNativeBinary;
 };
 
 class AndroidBitcodeLinker {

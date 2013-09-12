@@ -234,6 +234,9 @@ AndroidBitcodeLinker::LinkInAndroidBitcode(AndroidBitcodeItem &Item) {
     }
     case sys::ELF_SharedObject_FileType: {
       Item.setNative(true);
+      if (!Config.isLinkNativeBinary()) {
+        return error("Cannot link native binaries with bitcode" + File.str());
+      }
       break;
     }
     case sys::ELF_Relocatable_FileType: {
@@ -274,7 +277,12 @@ const sys::PathWithStatus &Filename = Item.getFile();
 
   if (!arch->isBitcodeArchive()) {
     Item.setNative(true);
-    return false;
+    if (Config.isLinkNativeBinary()) {
+      return false;
+    }
+    else {
+      return error("Cannot link native binaries with bitcode" + Filename.str());
+    }
   }
 
   std::vector<Module*> Modules;
@@ -395,7 +403,12 @@ const sys::PathWithStatus &Filename = Item.getFile();
 
   if (!arch->isBitcodeArchive()) {
     Item.setNative(true);
-    return false;
+    if (Config.isLinkNativeBinary()) {
+      return false;
+    }
+    else {
+      return error("Cannot link native binaries with bitcode" + Filename.str());
+    }
   }
 
   std::set<std::string> NotDefinedByArchive;
