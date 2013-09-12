@@ -30,7 +30,6 @@ ABI = None
 LD = None
 BITCODE = None
 OUTPUT = None
-INFO = None
 
 TRANSLATE_CMD = None
 LLC_CMD = None
@@ -38,10 +37,11 @@ LD_CMD = None
 AS_CMD = None
 USE_GAS = False
 
+# bitcode wrapper
 SHARED = True
 SONAME = None
 DEPEND_LIBS = []
-LDFLAGS = []
+LDFLAGS = None
 
 def log(string):
     global VERBOSE
@@ -146,7 +146,7 @@ def get_as_name_for_arch(arch):
     return ''
 
 def handle_args():
-    global BITCODE, OUTPUT, INFO
+    global BITCODE, OUTPUT
     global PLATFORM, LLVM_VERSION, ABI, NDK, SYSROOT, LD
     global VERBOSE, KEEP, USE_GAS
 
@@ -201,13 +201,9 @@ def handle_args():
     # TODO: Support multiple input
     BITCODE = args.file[0][0]
     OUTPUT = args.file[0][1]
-    INFO = BITCODE + '.info'
 
     if os.path.isfile(BITCODE) != True:
         error('Input bitcode %s not found!' % (BITCODE))
-
-    if os.path.isfile(INFO) != True:
-        error('Info file %s not found!' % (INFO))
 
     VERBOSE = args.verbose
     KEEP = args.keep
@@ -264,83 +260,6 @@ def parse_bitcode_type(data):
     return True
 
 '''
- enum ZOptionEnum {
-    kCombReloc     = 1 << 0,  ///< [on] -z combreloc, [off] -z nocombreloc
-    kDefs          = 1 << 1,  ///< -z defs
-    kExecStack     = 1 << 2,  ///< [on] -z execstack, [off] -z noexecstack
-    kInitFirst     = 1 << 3,  ///< -z initfirst
-    kInterPose     = 1 << 4,  ///< -z interpose
-    kLoadFltr      = 1 << 5,  ///< -z loadfltr
-    kMulDefs       = 1 << 6,  ///< -z muldefs
-    kNoCopyReloc   = 1 << 7,  ///< -z nocopyreloc
-    kNoDefaultLib  = 1 << 8,  ///< -z nodefaultlib
-    kNoDelete      = 1 << 9,  ///< -z nodelete
-    kNoDLOpen      = 1 << 10, ///< -z nodlopen
-    kNoDump        = 1 << 11, ///< -z nodump
-    kRelro         = 1 << 12, ///< [on] -z relro, [off] -z norelro
-    kLazy          = 1 << 13, ///< [on] -z lazy, [off] -z now
-    kOrigin        = 1 << 14, ///< -z origin
-    kZOptionMask   = 0xFFFF
-  };
-'''
-
-ZOPTION_SET = []
-ZOPTION_UNSET = []
-
-def parse_ldflags(data):
-    flags = []
-    ldflags = struct.unpack('<i',data)[0]
-    if ldflags & (1 << 0):
-        flags += ['-z'] + ['combreloc']
-
-    if ldflags & (1 << 1):
-        flags += ['--no-undefined']
-
-    if ldflags & (1 << 2):
-        flags += ['-z']+['execstack']
-    else:
-        flags += ['-z']+['noexecstack']
-
-    if ldflags & (1 << 3):
-        flags += ['-z']+['initfirst']
-
-    if ldflags & (1 << 4):
-        flags += ['-z']+['interpose']
-
-    if ldflags & (1 << 5):
-        flags += ['-z']+['loadfltr']
-
-    if ldflags & (1 << 6):
-        flags += ['-z']+['muldefs']
-
-    if ldflags & (1 << 7):
-        flags += ['-z']+['nocopyreloc']
-
-    if ldflags & (1 << 8):
-        flags += ['-z']+['nodefaultlib']
-
-    if ldflags & (1 << 9):
-        flags += ['-z']+['nodelete']
-
-    if ldflags & (1 << 10):
-        flags += ['-z']+['nodlopen']
-
-    if ldflags & (1 << 11):
-        flags += ['-z']+['nodump']
-
-    if ldflags & (1 << 12):
-        flags += ['-z']+['relro']
-
-    if ldflags & (1 << 13):
-        flags += ['-z']+['lazy']
-    else:
-        flags += ['-z']+['now']
-
-    if ldflags & (1 << 14):
-        flags += ['-z']+['origin']
-    return flags
-
-'''
   The bitcode wrapper definition:
 
   struct AndroidBitcodeWrapper {
@@ -358,6 +277,7 @@ def parse_ldflags(data):
     uint16_t OptimizationLevelLen;
     uint32_t OptimizationLevel;
   };
+
 '''
 def read_bitcode_wrapper(bitcode):
     global SHARED, SONAME, DEPEND_LIBS, LDFLAGS
@@ -376,12 +296,23 @@ def read_bitcode_wrapper(bitcode):
         if hex(tag) == '0x5001':
             SHARED = parse_bitcode_type(data)
         elif hex(tag) == '0x5002':
-            SONAME = str(data).rstrip('\0')
-        elif hex(tag) == '0x5003':
-            DEPEND_LIBS += ['-l'+str(data).rstrip('\0')]
-        elif hex(tag) == '0x5004':
-            LDFLAGS = parse_ldflags(data)
+            LDFLAGS = str(data).rstrip('\0')
         offset -= (length+4)
+
+#  TODO: parse ldflags to find depended libraries
+#  Remove '-o outputfile' from ldflags, we already know the name of output file.
+def process_ldflags(ldflags):
+    orig_ldflags = ldflags.split()
+    output_ldflags = []
+    save = True
+    for option in orig_ldflags:
+       if option == '-o':
+          save = False
+       else:
+           if save == True:
+               output_ldflags += [option]
+           save = True
+    return output_ldflags
 
 def run_cmd(args):
     log(' '.join(args))
@@ -471,20 +402,16 @@ def do_llc(bitcode, output):
 
     return ret,text
 
-def do_ld(relocatable, output, shared=True):
+def do_ld(relocatable, output):
     global LD_CMD
     global ABI, PLATFORM
     global SHARED, SONAME, DEPEND_LIBS, LDFLAGS
-    global INFO
 
     arch = get_arch_for_abi(ABI)
     sysroot = sysroot_for_arch(arch)
 
-    f = open(INFO,'r')
-    ldflags = f.readline()
-    f.close()
-
     args = [LD_CMD]
+    args += ['--sysroot='+sysroot]
     args += ['-m']
     args += [get_default_emulation_for_arch(arch)]
     args += ['-Bsymbolic']
@@ -498,16 +425,18 @@ def do_ld(relocatable, output, shared=True):
     else:
         args += [sysroot+'/usr/lib/crtbegin_dynamic.o']
     args += [relocatable]
-    args += ldflags.split()
-    # compiler runtime + unwind library
+    args += process_ldflags(LDFLAGS)
+
     if SYSROOT:
         args += ['@' + SYSROOT + '/usr/lib/libportable.wrap']
         args += [SYSROOT + '/usr/lib/libportable.a']
+        # compiler runtime + unwind library
         args += [SYSROOT + '/usr/lib/libcompiler_rt_static.a']
         args += [SYSROOT + '/usr/lib/libgabi++_shared.so']
     else:
         args += ['@' + NDK + '/sources/android/libportable/libs/'+ABI+'/libportable.wrap']
         args += [NDK+'/sources/android/libportable/libs/'+ABI+'/libportable.a']
+        # compiler runtime + unwind library
         args += [NDK+'/sources/android/compiler-rt/libs/'+ABI+'/libcompiler_rt_static.a']
         args += [NDK+'/sources/cxx-stl/gabi++/libs/'+ABI+'/libgabi++_shared.so']
     args += ['-ldl']
@@ -516,6 +445,9 @@ def do_ld(relocatable, output, shared=True):
         args += [sysroot+'/usr/lib/crtend_so.o']
     else:
         args += [sysroot+'/usr/lib/crtend_android.o']
+
+    args += ['-o']
+    args += [output]
 
     return run_cmd(args)
 
