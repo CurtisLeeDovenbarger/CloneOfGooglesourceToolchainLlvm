@@ -429,6 +429,8 @@ def get_llc_flags_for_abi(abi):
     extra_args = []
     if abi == 'x86':
         extra_args += ['-disable-fp-elim']
+        # Translated from -mstackrealign which is default in gcc
+        extra_args += ['-force-align-stack']
         # Not all Android x86 devices have these features
         extra_args += ['-mattr="-ssse3,-sse41,-sse42,-sse4a,-popcnt"']
     elif abi == 'armeabi' or abi == 'armeabi-v7a':
