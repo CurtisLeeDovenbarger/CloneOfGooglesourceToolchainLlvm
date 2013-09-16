@@ -342,10 +342,11 @@ def do_as(asm, relocatable):
     global ABI
 
     args = [AS_CMD]
-    args += ['-mfloat-abi=soft']
     if ABI == 'armeabi':
+        args += ['-mfloat-abi=soft']
         args += ['-march=armv5te']
     elif ABI == 'armeabi-v7a':
+        args += ['-mfloat-abi=soft']
         args += ['-march=armv7-a']
         args += ['-mfpu=vfpv3-d16']
 
@@ -386,7 +387,8 @@ def do_llc(bitcode, output):
     args += ['-code-model=small']
     args += ['-use-init-array']
     args += ['-mc-relax-all']
-    args += ['-float-abi=soft']
+    if ABI == 'armeabi' or ABI == 'armeabi-v7a':
+        args += ['-float-abi=soft']
     args += get_llc_flags_for_abi(ABI)
     args += ['-O2']
     args += [bitcode]
