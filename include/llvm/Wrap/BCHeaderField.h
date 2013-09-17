@@ -36,9 +36,7 @@ class BCHeaderField {
     kAndroidCompilerVersion = 0x4001,
     kAndroidOptimizationLevel = 0x4002,
     kAndroidBitcodeType = 0x5001,
-    kAndroidSOName = 0x5002,
-    kAndroidDependLibrary = 0x5003,
-    kAndroidLDFlags = 0x5004
+    kAndroidLDFlags = 0x5002
   } Tag;
   typedef uint16_t FixedSubfield;
 

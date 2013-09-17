@@ -56,9 +56,7 @@ class BitcodeWrapper {
   uint32_t mCompilerVersion;
   uint32_t mOptimizationLevel;
   uint32_t mBitcodeType;
-  uint32_t mLDFlags;
-  std::string mSOName;
-  std::vector<std::string> mDependentLibrary;
+  std::string mLDFlags;
 
  public:
   /**
@@ -123,22 +121,8 @@ class BitcodeWrapper {
   /**
    * \return linker flags for this bitcode.
    */
-  uint32_t getLDFlags() const {
+  const std::string& getLDFlags() const {
     return mLDFlags;
-  }
-
-  /**
-   * \return soname for this bitcode.
-   */
-  const std::string& getSOName() const {
-    return mSOName;
-  }
-
-  /**
-   * \return list of dependent library for this bitcode.
-   */
-  const std::vector<std::string>& getDependentLibrary() const {
-    return mDependentLibrary;
   }
 };
 

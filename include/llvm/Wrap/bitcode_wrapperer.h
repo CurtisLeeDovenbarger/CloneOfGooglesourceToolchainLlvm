@@ -96,16 +96,8 @@ class BitcodeWrapperer {
     return android_bitcode_type_;
   }
 
-  uint32_t getAndroidLDFlags() {
+  std::string getAndroidLDFlags() {
     return android_ldflags_;
-  }
-
-  std::string getAndroidSOName() {
-    return android_soname_;
-  }
-
-  std::vector<std::string> getAndroidDependentLibrary() {
-    return android_dependent_library_;
   }
 
   ~BitcodeWrapperer();
@@ -222,9 +214,7 @@ class BitcodeWrapperer {
   uint32_t android_compiler_version_;
   uint32_t android_optimization_level_;
   uint32_t android_bitcode_type_;
-  uint32_t android_ldflags_;
-  std::string android_soname_;
-  std::vector<std::string> android_dependent_library_;
+  std::string android_ldflags_;
 
   // PNaCl bitcode version
   uint32_t pnacl_bc_version_;

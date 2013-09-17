@@ -73,6 +73,12 @@ static cl::list<bool> WholeArchive("whole-archive",
 static cl::list<bool> NoWholeArchive("no-whole-archive",
   cl::desc("Turn off of the --whole-archive option for for subsequent archive files"));
 
+static cl::opt<bool>
+LinkNativeBinary("link-native-binary",
+  cl::ZeroOrMore,
+  cl::Hidden,
+  cl::desc("Allow to link native binaries, this is only for testing purpose"));
+
 // Strip options
 static cl::opt<bool>
 Strip("strip-all", cl::desc("Strip all symbol info"));
@@ -123,11 +129,7 @@ static cl::opt<bool> CO10("eh-frame-hdr",
   cl::ZeroOrMore,
   cl::desc("Compatibility option: ignored"));
 
-static std::vector<std::string> DepLibs;
-
 static std::string progname;
-
-static std::string OutputInfoFile;
 
 // FileRemover objects to clean up output files on the event of an error.
 static FileRemover OutputRemover;
@@ -139,92 +141,183 @@ static void PrintAndExit(const std::string &Message, int errcode = 1)
   exit(errcode);
 }
 
-enum ZOptionEnum {
-    kCombReloc     = 1 << 0,  ///< [on] -z combreloc, [off] -z nocombreloc
-    kDefs          = 1 << 1,  ///< -z defs
-    kExecStack     = 1 << 2,  ///< [on] -z execstack, [off] -z noexecstack
-    kInitFirst     = 1 << 3,  ///< -z initfirst
-    kInterPose     = 1 << 4,  ///< -z interpose
-    kLoadFltr      = 1 << 5,  ///< -z loadfltr
-    kMulDefs       = 1 << 6,  ///< -z muldefs
-    kNoCopyReloc   = 1 << 7,  ///< -z nocopyreloc
-    kNoDefaultLib  = 1 << 8,  ///< -z nodefaultlib
-    kNoDelete      = 1 << 9,  ///< -z nodelete
-    kNoDLOpen      = 1 << 10, ///< -z nodlopen
-    kNoDump        = 1 << 11, ///< -z nodump
-    kRelro         = 1 << 12, ///< [on] -z relro, [off] -z norelro
-    kLazy          = 1 << 13, ///< [on] -z lazy, [off] -z now
-    kOrigin        = 1 << 14, ///< -z origin
-    kZOptionMask   = 0xFFFF
-};
-
-static uint32_t EncodeZOptions() {
-  uint32_t zflag = 0;
-  cl::list<std::string>::const_iterator I = ZOptions.begin(),
-                                        E = ZOptions.end();
-  while (I != E) {
-    if (*I == "combreloc")
-      zflag |= kCombReloc;
-
-    if (*I == "defs")
-      zflag |= kDefs;
-
-    if (*I == "execstack")
-      zflag |= kExecStack;
-
-    if (*I == "initfirst")
-      zflag |= kInitFirst;
-
-    if (*I == "interpose")
-      zflag |= kInterPose;
-
-    if (*I == "loadfltr")
-      zflag |= kLoadFltr;
-
-    if (*I == "muldefs")
-      zflag |= kMulDefs;
-
-    if (*I == "nocopyreloc")
-      zflag |= kNoCopyReloc;
-
-    if (*I == "nodefaultlib")
-      zflag |= kNoDefaultLib;
-
-    if (*I == "nodelete")
-      zflag |= kNoDelete;
-
-    if (*I == "nodlopen")
-      zflag |= kNoDLOpen;
-
-    if (*I == "nodump")
-      zflag |= kNoDump;
-
-    if (*I == "relro")
-      zflag |= kRelro;
-
-    if (*I == "lazy")
-      zflag |= kLazy;
-
-    if (*I == "origin")
-      zflag |= kOrigin;
-
-    ++I;
-  }
-
-  // -Wl,--no-undefined
-  if (NoUndefined)
-    zflag |= kDefs;
-  return zflag;
-}
-
 static void WriteInt32(uint8_t *mem, unsigned offset, uint32_t value) {
   mem[offset  ] = value & 0x000000ff;
   mem[offset+1] = (value & 0x0000ff00) >> 8;
   mem[offset+2] = (value & 0x00ff0000) >> 16;
   mem[offset+3] = (value & 0xff000000) >> 24;
 }
+static std::string getLibName(std::string LibPath) {
+  std::string libname = sys::path::stem(LibPath);
+  if (!libname.empty() && libname.substr(0,3) == "lib")
+    return libname.substr(3,libname.length()-3);
+  return "";
+}
 
-static void WrapAndroidBitcode(std::vector<std::string*> &BCStrings, raw_ostream &Output) {
+static bool isBitcodeArchive(sys::Path FilePath) {
+  if (!FilePath.isArchive())
+    return false;
+
+  std::string ErrMsg;
+  std::auto_ptr<Archive> AutoArch (
+    Archive::OpenAndLoad(FilePath,
+                         llvm::getGlobalContext(),
+                         &ErrMsg));
+  Archive* arch = AutoArch.get();
+
+  if (!arch) {
+    return false;
+  }
+
+  return arch->isBitcodeArchive();
+}
+
+static sys::Path IsLibrary(StringRef Name,
+                           const sys::Path &Directory) {
+  sys::Path FullPath(Directory);
+
+  // 1. Try bitcode archives
+  FullPath.appendComponent(("lib" + Name).str());
+  FullPath.appendSuffix("a");
+  if (isBitcodeArchive(FullPath))
+    return FullPath;
+
+  // 2. Try libX.so
+  FullPath.eraseSuffix();
+  FullPath.appendSuffix("so");
+
+  if (LinkNativeBinary && FullPath.isDynamicLibrary())
+    return FullPath;
+  if (FullPath.isBitcodeFile())
+    return FullPath;
+
+  // 3. Try libX.bc
+  FullPath.eraseSuffix();
+  FullPath.appendSuffix("bc");
+  if (FullPath.isBitcodeFile())
+    return FullPath;
+
+  // 4. Try native archives
+  FullPath.eraseSuffix();
+  FullPath.appendComponent(("lib" + Name).str());
+  FullPath.appendSuffix("a");
+  if (LinkNativeBinary && FullPath.isArchive())
+    return FullPath;
+
+  // Not found
+  FullPath.clear();
+  return FullPath;
+}
+
+static sys::Path FindLib(StringRef Filename) {
+  sys::Path FilePath(Filename);
+  if (FilePath.canRead() &&
+      (FilePath.isArchive() || FilePath.isDynamicLibrary()))
+    return FilePath;
+
+  for (unsigned Index = 0; Index != LibPaths.size(); ++Index) {
+    sys::Path Directory(LibPaths[Index]);
+    sys::Path FullPath = IsLibrary(Filename, Directory);
+    if (!FullPath.isEmpty())
+      return FullPath;
+  }
+  return sys::Path();
+}
+
+static std::string getSOName(const std::string& Filename,
+                             AndroidBitcodeLinker::ABCItemList& Items) {
+  for (unsigned i = 0; i < Items.size(); ++i) {
+    if (Items[i].getFile().str() == Filename &&
+        Items[i].getBitcodeType() == BCHeaderField::BC_SharedObject) {
+      return Items[i].getSOName();
+    }
+  }
+  return "";
+}
+
+static std::string* ProcessArgv(int argc, char **argv,
+                                AndroidBitcodeLinker::ABCItemList& Items)
+{
+  std::string *ArgvString = new std::string;
+  raw_string_ostream Output(*ArgvString);
+
+  for (int i = 1 ; i < argc ; ++i) {
+    // option
+    if (argv[i][0] == '-') {
+      // ignore "-" or "--"
+      char *c = argv[i];
+      while (*c == '-')
+        ++c;
+
+      // skip -o and -soname, we will add it back later
+      if (!strcmp (c,"o") || !strcmp(c,"soname")) {
+        i++;
+        continue;
+      }
+
+      // ignore these option that doesn't need
+      if (!strncmp (c,"sysroot",7) ||
+          !strncmp(c,"L",1) ||
+          !strcmp(c,"disable-opt") ||
+          !strcmp(c,"link-native-binary"))
+        continue;
+
+      Output << argv[i] << " ";
+    }
+    else { // file or directory
+      sys::Path file(argv[i]);
+
+      // FIXME: empty archive
+      if (isBitcodeArchive(file))
+        continue;
+
+      if (!file.isRegularFile()) {
+        Output << argv[i] << " ";
+        continue;
+      }
+
+      if (!file.isBitcodeFile()) {
+        if (LinkNativeBinary) {
+          Output << argv[i] << " ";
+        }
+        else {
+          std::string libname = getLibName(argv[i]);
+          if (!libname.empty())
+            Output << "-l" << libname << " ";
+        }
+      }
+      else { // bitcode or bitcode wrapper
+        std::string soname = getLibName(getSOName(file.str(), Items));
+
+        if (!soname.empty()) {
+          Output << "-l" << soname << " ";
+        }
+      }
+    }
+  }
+
+  // Convert .bc into .so
+  std::string NativeFileName;
+  if (Shared) {
+    if (SOName.empty()) {
+       NativeFileName = sys::path::stem(OutputFilename);
+    }
+    else {
+       NativeFileName = sys::path::stem(SOName);
+    }
+    NativeFileName += ".so";
+    Output << "-soname " << NativeFileName << " ";
+  }
+  else {
+    NativeFileName = sys::path::stem(OutputFilename);
+  }
+
+  Output << "-o " << NativeFileName;
+  Output.flush();
+  return ArgvString;
+}
+
+static void WrapAndroidBitcode(std::vector<std::string*> &BCStrings, std::string& LDFlags, raw_ostream &Output) {
   std::vector<BCHeaderField> header_fields;
   std::vector<uint8_t *> field_data;
   size_t variable_header_size = 0;
@@ -238,44 +331,13 @@ static void WrapAndroidBitcode(std::vector<std::string*> &BCStrings, raw_ostream
   header_fields.push_back(BitcodeTypeField);
   variable_header_size += BitcodeTypeField.GetTotalSize();
 
-  // Encode -z options
-  uint32_t LDFlags = EncodeZOptions();
-  field_data.push_back(new uint8_t[sizeof(uint32_t)]);
-  WriteInt32(field_data.back(), 0, LDFlags);
+  // ldflags
+  field_data.push_back(new uint8_t[LDFlags.size()+1]);
+  strcpy((char *) field_data.back(), LDFlags.c_str());
   BCHeaderField LDFlagsField(BCHeaderField::kAndroidLDFlags,
-                             sizeof(uint32_t), field_data.back());
+                            LDFlags.size()+1, field_data.back());
   header_fields.push_back(LDFlagsField);
   variable_header_size += LDFlagsField.GetTotalSize();
-
-  // SOName
-  if (Shared) {
-    std::string soname;
-
-    // default to output filename ; must end with .so
-    if (SOName.empty()) {
-       soname = sys::path::stem(OutputFilename);
-    }
-    else {
-       soname = sys::path::stem(SOName);
-    }
-    soname += ".so";
-    field_data.push_back(new uint8_t[soname.size()+1]);
-    strcpy((char *) field_data.back(), soname.c_str());
-    BCHeaderField SONameField(BCHeaderField::kAndroidSOName,
-                              soname.size()+1, field_data.back());
-    header_fields.push_back(SONameField);
-    variable_header_size += SONameField.GetTotalSize();
-  }
-
-  // Add dependent library
-  for (cl::list<std::string>::const_iterator lib_iter = DepLibs.begin(),
-       lib_end = DepLibs.end(); lib_iter != lib_end; ++lib_iter) {
-    const char *depend_lib = lib_iter->c_str();
-    BCHeaderField DependLibField(BCHeaderField::kAndroidDependLibrary,
-                                 lib_iter->size()+1, (uint8_t *) depend_lib);
-    header_fields.push_back(DependLibField);
-    variable_header_size += DependLibField.GetTotalSize();
-  }
 
   // Compute bitcode size
   uint32_t totalBCSize = 0;
@@ -314,7 +376,7 @@ static void WrapAndroidBitcode(std::vector<std::string*> &BCStrings, raw_ostream
   }
 }
 
-void GenerateBitcode(std::vector<std::string*> &BCStrings, const std::string& FileName) {
+void GenerateBitcode(std::vector<std::string*> &BCStrings, std::string& LDFlags, const std::string& FileName) {
 
   if (Verbose)
     errs() << "Generating Bitcode To " << FileName << '\n';
@@ -328,72 +390,8 @@ void GenerateBitcode(std::vector<std::string*> &BCStrings, const std::string& Fi
     return;
   }
 
-  WrapAndroidBitcode(BCStrings, Out.os());
+  WrapAndroidBitcode(BCStrings, LDFlags, Out.os());
   Out.keep();
-}
-
-static bool isBitcodeArchive(sys::Path FilePath) {
-  if (!FilePath.isArchive())
-    return false;
-
-  std::string ErrMsg;
-  std::auto_ptr<Archive> AutoArch (
-    Archive::OpenAndLoad(FilePath,
-                         llvm::getGlobalContext(),
-                         &ErrMsg));
-  Archive* arch = AutoArch.get();
-
-  if (!arch) {
-    return false;
-  }
-
-  return arch->isBitcodeArchive();
-}
-
-static sys::Path IsLibrary(StringRef Name,
-                           const sys::Path &Directory) {
-  sys::Path FullPath(Directory);
-
-  // 1. Try bitcode archives
-  FullPath.appendComponent(("lib" + Name).str());
-  FullPath.appendSuffix("a");
-  if (isBitcodeArchive(FullPath))
-    return FullPath;
-
-  // 2. Try libX.so
-  FullPath.eraseSuffix();
-  FullPath.appendSuffix("so");
-
-  if (FullPath.isDynamicLibrary())
-    return FullPath;
-  if (FullPath.isBitcodeFile())
-    return FullPath;
-
-  // 3. Try native archives
-  FullPath.eraseSuffix();
-  FullPath.appendComponent(("lib" + Name).str());
-  FullPath.appendSuffix("a");
-  if (FullPath.isArchive())
-    return FullPath;
-
-  // Not found
-  FullPath.clear();
-  return FullPath;
-}
-
-static sys::Path FindLib(StringRef Filename) {
-  sys::Path FilePath(Filename);
-  if (FilePath.canRead() &&
-      (FilePath.isArchive() || FilePath.isDynamicLibrary()))
-    return FilePath;
-
-  for (unsigned Index = 0; Index != LibPaths.size(); ++Index) {
-    sys::Path Directory(LibPaths[Index]);
-    sys::Path FullPath = IsLibrary(Filename, Directory);
-    if (!FullPath.isEmpty())
-      return FullPath;
-  }
-  return sys::Path();
 }
 
 static void BuildLinkItems(
@@ -459,30 +457,9 @@ static void BuildLinkItems(
       Items.push_back(AndroidBitcodeItem(p.str(), isWhole));
     }
     else {
-      PrintAndExit("cannot find -l " + *lib_iter);
+      PrintAndExit("cannot find -l" + *lib_iter);
     }
   }
-}
-
-static void DumpLDFlags(int argc, char **argv, const std::string &FileName)
-{
-  // Create the info file.
-  std::string ErrorInfo;
-  tool_output_file Out(FileName.c_str(), ErrorInfo);
-
-  if (!ErrorInfo.empty()) {
-    PrintAndExit(ErrorInfo);
-    return;
-  }
-
-  for (int i = 1 ; i < argc ; ++i) {
-    sys::Path path(argv[i]);
-    // if input is bitcode or bitcode archieve, ignore it
-    if (!path.isBitcodeFile() && !isBitcodeArchive(path))
-      Out.os() << argv[i] << ' ';
-  }
-
-  Out.keep();
 }
 
 int main(int argc, char** argv) {
@@ -495,11 +472,6 @@ int main(int argc, char** argv) {
   progname = sys::path::stem(argv[0]);
 
   cl::ParseCommandLineOptions(argc, argv, "Bitcode link tool\n");
-
-  // Store LDFLAGS in .info file
-  // TODO: CFLAGS
-  OutputInfoFile = OutputFilename + ".info";
-  DumpLDFlags(argc, argv, OutputInfoFile);
 
   // Arrange for the output file to be delete on any errors.
   OutputRemover.setFile(OutputFilename);
@@ -518,35 +490,20 @@ int main(int argc, char** argv) {
 
   LinkerConfig Config(Ctx, progname, OutputFilename,
                       Verbose, DisableOptimizations,
-                      Strip, StripDebug);
+                      Strip, StripDebug, LinkNativeBinary);
 
   AndroidBitcodeLinker linker(Config);
 
   if (linker.LinkInAndroidBitcodes(Items, BCStrings))
     return 1;
 
-  // Add bitcode libraries dependents
-  for (unsigned i = 0; i < Items.size(); ++i) {
-    BitcodeWrapper *wrapper = Items[i].getWrapper();
-    std::string libname;
-
-    if (wrapper != 0 && wrapper->getBitcodeType() == BCHeaderField::BC_SharedObject) {
-      libname = sys::path::stem(wrapper->getSOName());
-    }
-
-    // Extract the library name
-    if (!libname.empty() && libname.substr(0,3) == "lib") {
-      DepLibs.push_back(libname.substr(3));
-    }
-  }
-
-  // Remove any consecutive duplication of the same library
-  DepLibs.erase(std::unique(DepLibs.begin(), DepLibs.end()), DepLibs.end());
-
+  // Output processed argv
+  std::string *LDFlags = ProcessArgv(argc, argv, Items);
   // Write linked bitcode
-  GenerateBitcode(BCStrings, OutputFilename);
+  GenerateBitcode(BCStrings, *LDFlags, OutputFilename);
 
   // Operation complete
+  delete LDFlags;
   OutputRemover.releaseFile();
   return 0;
 }

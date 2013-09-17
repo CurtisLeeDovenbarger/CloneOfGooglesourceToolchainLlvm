@@ -44,14 +44,13 @@ static const uint32_t kAndroidTargetAPI = 0;
 static const uint32_t kAndroidDefaultCompilerVersion = 0;
 static const uint32_t kAndroidDefaultOptimizationLevel = 3;
 static const uint32_t kAndroidBitcodeType = 0;
-static const uint32_t kAndroidLDFlags = 0;
 
 // PNaCl bitcode version number.
 static const uint32_t kPnaclBitcodeVersion = 0;
 
 // Max size for variable fields. Currently only used for writing them
 // out to files (the parsing works for arbitrary sizes).
-static const size_t kMaxVariableFieldSize = 256;
+static const size_t kMaxVariableFieldSize = 512;
 
 BitcodeWrapperer::BitcodeWrapperer(WrapperInput* infile, WrapperOutput* outfile)
     : infile_(infile),
@@ -67,7 +66,6 @@ BitcodeWrapperer::BitcodeWrapperer(WrapperInput* infile, WrapperOutput* outfile)
       android_compiler_version_(kAndroidDefaultCompilerVersion),
       android_optimization_level_(kAndroidDefaultOptimizationLevel),
       android_bitcode_type_(kAndroidBitcodeType),
-      android_ldflags_(kAndroidLDFlags),
       pnacl_bc_version_(0),
       error_(false) {
   buffer_.resize(kBitcodeWrappererBufferSize);
@@ -262,19 +260,7 @@ bool BitcodeWrapperer::ParseWrapperHeader() {
         case BCHeaderField::kAndroidLDFlags:
           if (field.Write((uint8_t*)&tempField,
                           sizeof(tempField))) {
-            android_ldflags_ = tempField.val.int32;
-          }
-          break;
-        case BCHeaderField::kAndroidSOName:
-          if (field.Write((uint8_t*)&tempField,
-                          sizeof(tempField))) {
-            android_soname_ = (char *) tempField.val.char8;
-          }
-          break;
-        case BCHeaderField::kAndroidDependLibrary:
-          if (field.Write((uint8_t*)&tempField,
-                          sizeof(tempField))) {
-            android_dependent_library_.push_back((char *)tempField.val.char8);
+            android_ldflags_ = (char *) tempField.val.char8;
           }
           break;
         default:
