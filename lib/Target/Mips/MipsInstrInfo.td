@@ -871,6 +871,7 @@ def ADDu  : MMRel, ArithLogicR<"addu", CPURegsOpnd, 1, IIAlu, add>,
             ADD_FM<0, 0x21>;
 def SUBu  : MMRel, ArithLogicR<"subu", CPURegsOpnd, 0, IIAlu, sub>,
             ADD_FM<0, 0x23>;
+let Defs = [HI, LO] in
 def MUL   : MMRel, ArithLogicR<"mul", CPURegsOpnd, 1, IIImul, mul>,
             ADD_FM<0x1c, 2>;
 def ADD   : MMRel, ArithLogicR<"add", CPURegsOpnd>, ADD_FM<0, 0x20>;
