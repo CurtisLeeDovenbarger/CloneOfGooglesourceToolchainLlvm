@@ -16,6 +16,7 @@
 
 #include <list>
 #include <cstring>
+#include <utility>
 
 #include "AndroidBitcodeLinker.h"
 
@@ -131,8 +132,20 @@ static cl::opt<bool> CO10("eh-frame-hdr",
 
 static std::string progname;
 
+// Implied library dependency for specific libraries
+static std::map<std::string, std::string> ImpliedLibs;
+
 // FileRemover objects to clean up output files on the event of an error.
 static FileRemover OutputRemover;
+
+static void InitImpliedLibs()
+{
+  ImpliedLibs.clear();
+  ImpliedLibs.insert(std::make_pair("stlport_shared","gabi++_static"));
+  ImpliedLibs.insert(std::make_pair("stlport_static","gabi++_static"));
+  ImpliedLibs.insert(std::make_pair("c++_shared", "gabi++_static"));
+  ImpliedLibs.insert(std::make_pair("c++_static", "gabi++_static"));
+}
 
 static void PrintAndExit(const std::string &Message, int errcode = 1)
 {
@@ -147,10 +160,18 @@ static void WriteInt32(uint8_t *mem, unsigned offset, uint32_t value) {
   mem[offset+2] = (value & 0x00ff0000) >> 16;
   mem[offset+3] = (value & 0xff000000) >> 24;
 }
+
 static std::string getLibName(std::string LibPath) {
   std::string libname = sys::path::stem(LibPath);
   if (!libname.empty() && libname.substr(0,3) == "lib")
     return libname.substr(3,libname.length()-3);
+  return "";
+}
+
+static std::string getImpliedLibName(std::string LibPath) {
+  std::string libname = getLibName(LibPath);
+  if (ImpliedLibs.count(libname) != 0)
+    return ImpliedLibs.find(libname)->second;
   return "";
 }
 
@@ -267,33 +288,43 @@ static std::string* ProcessArgv(int argc, char **argv,
     else { // file or directory
       sys::Path file(argv[i]);
 
-      // FIXME: empty archive
-      if (isBitcodeArchive(file))
-        continue;
-
       if (!file.isRegularFile()) {
         Output << argv[i] << " ";
         continue;
       }
 
-      if (!file.isBitcodeFile()) {
-        if (LinkNativeBinary) {
-          Output << argv[i] << " ";
+      if (!isBitcodeArchive(file)) {
+        if (!file.isBitcodeFile()) {
+          if (LinkNativeBinary) {
+            Output << argv[i] << " ";
+          }
+          else {
+            std::string libname = getLibName(argv[i]);
+            if (!libname.empty())
+              Output << "-l" << libname << " ";
+          }
         }
-        else {
-          std::string libname = getLibName(argv[i]);
-          if (!libname.empty())
-            Output << "-l" << libname << " ";
-        }
-      }
-      else { // bitcode or bitcode wrapper
-        std::string soname = getLibName(getSOName(file.str(), Items));
+        else { // bitcode or bitcode wrapper
+          std::string soname = getLibName(getSOName(file.str(), Items));
 
-        if (!soname.empty()) {
-          Output << "-l" << soname << " ";
+          if (!soname.empty()) {
+            Output << "-l" << soname << " ";
+          }
         }
       }
+
+      // Check implied libs
+      std::string implied_lib = getImpliedLibName(file.str());
+      if (!implied_lib.empty())
+        Output << "-l" << implied_lib << " ";
     }
+  }
+
+  // Add the implied lib
+  for (unsigned i = 0 ; i < Items.size(); i++) {
+    std::string implied_lib = getImpliedLibName(Items[i].getSOName());
+    if (!implied_lib.empty())
+      Output << "-l" << implied_lib << " ";
   }
 
   // Convert .bc into .so
@@ -311,6 +342,10 @@ static std::string* ProcessArgv(int argc, char **argv,
   else {
     NativeFileName = sys::path::stem(OutputFilename);
   }
+
+  std::string implied_lib = getImpliedLibName(NativeFileName);
+  if (!implied_lib.empty())
+    Output << "-l" << implied_lib << " ";
 
   Output << "-o " << NativeFileName;
   Output.flush();
@@ -447,7 +482,7 @@ static void BuildLinkItems(
     if (!p.empty()) {
       bool isWhole = false;
       int filePos = Libraries.getPosition(lib_iter - Libraries.begin());
-      for(unsigned i = 0 ; i < wholeRange.size() ; ++i) {
+      for (unsigned i = 0 ; i < wholeRange.size(); ++i) {
         if (filePos > wholeRange[i].first &&
            (filePos < wholeRange[i].second || wholeRange[i].second == -1)) {
           isWhole = true;
@@ -480,6 +515,8 @@ int main(int argc, char** argv) {
   // Add default search path
   if (!Sysroot.empty())
     LibPaths.insert(LibPaths.begin(), Sysroot + "/usr/lib");
+
+  InitImpliedLibs();
 
   // Build a list of the items from our command line
   AndroidBitcodeLinker::ABCItemList Items;
