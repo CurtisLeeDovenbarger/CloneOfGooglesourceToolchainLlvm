@@ -299,19 +299,49 @@ def read_bitcode_wrapper(bitcode):
             LDFLAGS = str(data).rstrip('\0')
         offset -= (length+4)
 
-#  TODO: parse ldflags to find depended libraries
+def get_runtime_name(libname):
+    return {
+        'gabi++_static': 'libgabi++_static.a',
+        'gabi++_shared': 'libgabi++_shared.so',
+        }.get(libname, '')
+
+# Return the full path of specific compiler runtime
+def get_compiler_runtime(libname):
+    global NDK, SYSROOT, ABI
+    if SYSROOT:
+         return SYSROOT + '/usr/lib/' + libname
+    else:
+        arch = get_arch_for_abi(ABI)
+        sysroot = sysroot_for_arch(arch)
+        return {
+            'libportable.wrap': NDK+'/sources/android/libportable/libs/'+ABI+'/libportable.wrap',
+            'libportable.a': NDK+'/sources/android/libportable/libs/'+ABI+'/libportable.a',
+            'libcompiler_rt_static.a': NDK+'/sources/android/compiler-rt/libs/'+ABI+'/libcompiler_rt_static.a',
+            'libgabi++_shared.so': NDK+'/sources/cxx-stl/gabi++/libs/'+ABI+'/libgabi++_shared.so',
+            'libgabi++_static.a': NDK+'/sources/cxx-stl/gabi++/libs/'+ABI+'/libgabi++_static.a',
+            'libgccunwind.a': NDK+'/sources/android/gccunwind/libs/'+ABI+'/libgccunwind.a',
+            }.get(libname, sysroot+'/usr/lib/'+libname)
+
 #  Remove '-o outputfile' from ldflags, we already know the name of output file.
 def process_ldflags(ldflags):
     orig_ldflags = ldflags.split()
     output_ldflags = []
     save = True
     for option in orig_ldflags:
-       if option == '-o':
-          save = False
-       else:
-           if save == True:
-               output_ldflags += [option]
-           save = True
+        if option == '-o':
+            save = False
+        elif option[0:2] == '-l':
+            # Convert the runtime path
+            runtime_name = get_runtime_name(option[2:])
+            runtime_path = get_compiler_runtime(runtime_name)
+            if os.path.isfile(runtime_path):
+                output_ldflags += [runtime_path]
+            else:
+                output_ldflags += [option]
+        else:
+            if save == True:
+                output_ldflags += [option]
+            save = True
     return output_ldflags
 
 def run_cmd(args):
@@ -425,30 +455,22 @@ def do_ld(relocatable, output):
     args += ['-X']
 
     if SHARED:
-        args += [sysroot+'/usr/lib/crtbegin_so.o']
+        args += [get_compiler_runtime('crtbegin_so.o')]
     else:
-        args += [sysroot+'/usr/lib/crtbegin_dynamic.o']
+        args += [get_compiler_runtime('crtbegin_dynamic.o')]
     args += [relocatable]
     args += process_ldflags(LDFLAGS)
 
-    if SYSROOT:
-        args += ['@' + SYSROOT + '/usr/lib/libportable.wrap']
-        args += [SYSROOT + '/usr/lib/libportable.a']
-        # compiler runtime + unwind library
-        args += [SYSROOT + '/usr/lib/libcompiler_rt_static.a']
-        args += [SYSROOT + '/usr/lib/libgabi++_shared.so']
-    else:
-        args += ['@' + NDK + '/sources/android/libportable/libs/'+ABI+'/libportable.wrap']
-        args += [NDK+'/sources/android/libportable/libs/'+ABI+'/libportable.a']
-        # compiler runtime + unwind library
-        args += [NDK+'/sources/android/compiler-rt/libs/'+ABI+'/libcompiler_rt_static.a']
-        args += [NDK+'/sources/cxx-stl/gabi++/libs/'+ABI+'/libgabi++_shared.so']
+    args += ['@' + get_compiler_runtime('libportable.wrap')]
+    args += [get_compiler_runtime('libportable.a')]
+    args += [get_compiler_runtime('libcompiler_rt_static.a')]
+    args += [get_compiler_runtime('libgccunwind.a')]
     args += ['-ldl']
 
     if SHARED:
-        args += [sysroot+'/usr/lib/crtend_so.o']
+        args += [get_compiler_runtime('crtend_so.o')]
     else:
-        args += [sysroot+'/usr/lib/crtend_android.o']
+        args += [get_compiler_runtime('crtend_android.o')]
 
     args += ['-o']
     args += [output]
