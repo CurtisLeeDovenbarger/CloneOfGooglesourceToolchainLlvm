@@ -23,10 +23,10 @@ def SDT_MipsCMov         : SDTypeProfile<1, 4, [SDTCisSameAs<0, 1>,
                                                 SDTCisInt<4>]>;
 def SDT_MipsCallSeqStart : SDCallSeqStart<[SDTCisVT<0, i32>]>;
 def SDT_MipsCallSeqEnd   : SDCallSeqEnd<[SDTCisVT<0, i32>, SDTCisVT<1, i32>]>;
-def SDT_ExtractLOHI : SDTypeProfile<1, 2, [SDTCisInt<0>, SDTCisVT<1, untyped>,
-                                           SDTCisVT<2, i32>]>;
-def SDT_InsertLOHI : SDTypeProfile<1, 2, [SDTCisVT<0, untyped>,
-                                          SDTCisVT<1, i32>, SDTCisSameAs<1, 2>]>;
+def SDT_MFLOHI : SDTypeProfile<1, 1, [SDTCisInt<0>, SDTCisVT<1, untyped>]>;
+def SDT_MTLOHI : SDTypeProfile<1, 2, [SDTCisVT<0, untyped>,
+                                      SDTCisInt<1>, SDTCisSameAs<1, 2>]>;
+
 def SDT_MipsMultDiv : SDTypeProfile<1, 2, [SDTCisVT<0, untyped>, SDTCisInt<1>,
                                     SDTCisSameAs<1, 2>]>;
 def SDT_MipsMAddMSub : SDTypeProfile<1, 3,
@@ -86,10 +86,11 @@ def callseq_end   : SDNode<"ISD::CALLSEQ_END", SDT_MipsCallSeqEnd,
                             SDNPOptInGlue, SDNPOutGlue]>;
 
 // Node used to extract integer from LO/HI register.
-def ExtractLOHI : SDNode<"MipsISD::ExtractLOHI", SDT_ExtractLOHI>;
+def MipsMFHI : SDNode<"MipsISD::MFHI", SDT_MFLOHI>;
+def MipsMFLO : SDNode<"MipsISD::MFLO", SDT_MFLOHI>;
 
 // Node used to insert 32-bit integers to LOHI register pair.
-def InsertLOHI : SDNode<"MipsISD::InsertLOHI", SDT_InsertLOHI>;
+def MipsMTLOHI : SDNode<"MipsISD::MTLOHI", SDT_MTLOHI>;
 
 // Mult nodes.
 def MipsMult  : SDNode<"MipsISD::Mult", SDT_MipsMultDiv>;
@@ -679,11 +680,20 @@ class Div<string opstr, InstrItinClass itin, RegisterOperand RO,
 }
 
 // Move from Hi/Lo
+class PseudoMFLOHI<RegisterClass DstRC, RegisterClass SrcRC, SDNode OpNode>
+  : PseudoSE<(outs DstRC:$rd), (ins SrcRC:$hilo),
+             [(set DstRC:$rd, (OpNode SrcRC:$hilo))], IIHiLo>;
+
 class MoveFromLOHI<string opstr, RegisterClass RC, list<Register> UseRegs>:
   InstSE<(outs RC:$rd), (ins), !strconcat(opstr, "\t$rd"), [], IIHiLo, FrmR> {
   let Uses = UseRegs;
   let neverHasSideEffects = 1;
 }
+
+class PseudoMTLOHI<RegisterClass DstRC, RegisterClass SrcRC>
+  : PseudoSE<(outs DstRC:$lohi), (ins SrcRC:$lo, SrcRC:$hi),
+             [(set DstRC:$lohi, (MipsMTLOHI SrcRC:$lo, SrcRC:$hi))], IIHiLo>;
+
 
 class MoveToLOHI<string opstr, RegisterClass RC, list<Register> DefRegs>:
   InstSE<(outs), (ins RC:$rs), !strconcat(opstr, "\t$rs"), [], IIHiLo, FrmR> {
@@ -986,18 +996,13 @@ def MULT  : MMRel, Mult<"mult", IIImul, CPURegsOpnd, [HI, LO]>,
             MULT_FM<0, 0x18>;
 def MULTu : MMRel, Mult<"multu", IIImul, CPURegsOpnd, [HI, LO]>,
             MULT_FM<0, 0x19>;
-def PseudoMULT  : MultDivPseudo<MULT, ACRegs, CPURegsOpnd, MipsMult, IIImul>;
-def PseudoMULTu : MultDivPseudo<MULTu, ACRegs, CPURegsOpnd, MipsMultu, IIImul>;
 def SDIV  : Div<"div", IIIdiv, CPURegsOpnd, [HI, LO]>, MULT_FM<0, 0x1a>;
 def UDIV  : Div<"divu", IIIdiv, CPURegsOpnd, [HI, LO]>, MULT_FM<0, 0x1b>;
-def PseudoSDIV : MultDivPseudo<SDIV, ACRegs, CPURegsOpnd, MipsDivRem, IIIdiv, 0>;
-def PseudoUDIV : MultDivPseudo<UDIV, ACRegs, CPURegsOpnd, MipsDivRemU, IIIdiv,
-                               0>;
 
 def MTHI : MoveToLOHI<"mthi", CPURegs, [HI]>, MTLO_FM<0x11>;
 def MTLO : MoveToLOHI<"mtlo", CPURegs, [LO]>, MTLO_FM<0x13>;
-def MFHI : MoveFromLOHI<"mfhi", CPURegs, [HI]>, MFLO_FM<0x10>;
-def MFLO : MoveFromLOHI<"mflo", CPURegs, [LO]>, MFLO_FM<0x12>;
+def MFHI : MoveFromLOHI<"mfhi", CPURegs, [AC0]>, MFLO_FM<0x10>;
+def MFLO : MoveFromLOHI<"mflo", CPURegs, [AC0]>, MFLO_FM<0x12>;
 
 /// Sign Ext In Register Instructions.
 def SEB : SignExtInReg<"seb", i8, CPURegs>, SEB_FM<0x10, 0x20>;
@@ -1024,10 +1029,22 @@ def MADD  : MArithR<"madd", 1>, MULT_FM<0x1c, 0>;
 def MADDU : MArithR<"maddu", 1>, MULT_FM<0x1c, 1>;
 def MSUB  : MArithR<"msub">, MULT_FM<0x1c, 4>;
 def MSUBU : MArithR<"msubu">, MULT_FM<0x1c, 5>;
+
+let Predicates = [HasStdEnc, NotDSP] in {
+def PseudoMULT  : MultDivPseudo<MULT, ACRegs, CPURegsOpnd, MipsMult, IIImul>;
+def PseudoMULTu : MultDivPseudo<MULTu, ACRegs, CPURegsOpnd, MipsMultu, IIImul>;
+def PseudoMFHI : PseudoMFLOHI<CPURegs, ACRegs, MipsMFHI>;
+def PseudoMFLO : PseudoMFLOHI<CPURegs, ACRegs, MipsMFLO>;
+def PseudoMTLOHI : PseudoMTLOHI<ACRegs, CPURegs>;
 def PseudoMADD  : MAddSubPseudo<MADD, MipsMAdd>;
 def PseudoMADDU : MAddSubPseudo<MADDU, MipsMAddu>;
 def PseudoMSUB  : MAddSubPseudo<MSUB, MipsMSub>;
 def PseudoMSUBU : MAddSubPseudo<MSUBU, MipsMSubu>;
+}
+
+def PseudoSDIV : MultDivPseudo<SDIV, ACRegs, CPURegsOpnd, MipsDivRem, IIIdiv, 0>;
+def PseudoUDIV : MultDivPseudo<UDIV, ACRegs, CPURegsOpnd, MipsDivRemU, IIIdiv,
+                               0>;
 
 def RDHWR : ReadHardware<CPURegs, HWRegsOpnd>, RDHWR_FM;
 
@@ -1304,10 +1321,6 @@ defm : SetgeImmPats<CPURegs, SLTi, SLTiu>;
 
 // bswap pattern
 def : MipsPat<(bswap CPURegs:$rt), (ROTR (WSBH CPURegs:$rt), 16)>;
-
-// mflo/hi patterns.
-def : MipsPat<(i32 (ExtractLOHI ACRegs:$ac, imm:$lohi_idx)),
-              (EXTRACT_SUBREG ACRegs:$ac, imm:$lohi_idx)>;
 
 // Load halfword/word patterns.
 let AddedComplexity = 40 in {

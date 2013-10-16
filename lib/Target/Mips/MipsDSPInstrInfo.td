@@ -454,7 +454,6 @@ class MULT_DESC_BASE<string instr_asm, SDPatternOperator OpNode,
   string AsmString = !strconcat(instr_asm, "\t$ac, $rs, $rt");
   list<dag> Pattern = [(set ACRegsDSP:$ac, (OpNode CPURegs:$rs, CPURegs:$rt))];
   InstrItinClass Itinerary = itin;
-  int AddedComplexity = 20;
   bit isCommutable = 1;
 }
 
@@ -466,14 +465,15 @@ class MADD_DESC_BASE<string instr_asm, SDPatternOperator OpNode,
   list<dag> Pattern = [(set ACRegsDSP:$ac,
                         (OpNode CPURegs:$rs, CPURegs:$rt, ACRegsDSP:$acin))];
   InstrItinClass Itinerary = itin;
-  int AddedComplexity = 20;
   string Constraints = "$acin = $ac";
 }
 
-class MFHI_DESC_BASE<string instr_asm, RegisterClass RC, InstrItinClass itin> {
+class MFHI_DESC_BASE<string instr_asm, RegisterClass RC, SDNode OpNode,
+                     InstrItinClass itin> {
   dag OutOperandList = (outs CPURegs:$rd);
   dag InOperandList = (ins RC:$ac);
   string AsmString = !strconcat(instr_asm, "\t$rd, $ac");
+  list<dag> Pattern = [(set CPURegs:$rd, (OpNode RC:$ac))];
   InstrItinClass Itinerary = itin;
 }
 
@@ -737,8 +737,8 @@ class MAQ_SA_W_PHR_DESC : DPA_W_PH_DESC_BASE<"maq_sa.w.phr", MipsMAQ_SA_W_PHR>,
                           Defs<[DSPOutFlag16_19]>;
 
 // Move from/to hi/lo.
-class MFHI_DESC : MFHI_DESC_BASE<"mfhi", HIRegsDSP, NoItinerary>;
-class MFLO_DESC : MFHI_DESC_BASE<"mflo", LORegsDSP, NoItinerary>;
+class MFHI_DESC : MFHI_DESC_BASE<"mfhi", ACRegsDSP, MipsMFHI, NoItinerary>;
+class MFLO_DESC : MFHI_DESC_BASE<"mflo", ACRegsDSP, MipsMFLO, NoItinerary>;
 class MTHI_DESC : MTHI_DESC_BASE<"mthi", HIRegsDSP, NoItinerary>;
 class MTLO_DESC : MTHI_DESC_BASE<"mtlo", LORegsDSP, NoItinerary>;
 
@@ -1270,6 +1270,8 @@ def PseudoCMPU_LE_QB : PseudoCMP<CMPU_LE_QB>;
 def PseudoPICK_PH : PseudoPICK<PICK_PH>;
 def PseudoPICK_QB : PseudoPICK<PICK_QB>;
 
+def PseudoMTLOHI_DSP : PseudoMTLOHI<ACRegsDSP, CPURegs>;
+
 // Patterns.
 class DSPPat<dag pattern, dag result, Predicate pred = HasDSP> :
   Pat<pattern, result>, Requires<[pred]>;
@@ -1403,11 +1405,6 @@ def : EXTR_W_TY1_R1_Pat<MipsEXTR_RS_W, EXTR_RS_W>;
 def : EXTR_W_TY1_R2_Pat<MipsEXTR_RS_W, EXTRV_RS_W>;
 def : EXTR_W_TY1_R1_Pat<MipsEXTR_S_H, EXTR_S_H>;
 def : EXTR_W_TY1_R2_Pat<MipsEXTR_S_H, EXTRV_S_H>;
-
-// mflo/hi patterns.
-let AddedComplexity = 20 in
-def : DSPPat<(i32 (ExtractLOHI ACRegsDSP:$ac, imm:$lohi_idx)),
-             (EXTRACT_SUBREG ACRegsDSP:$ac, imm:$lohi_idx)>;
 
 // Indexed load patterns.
 class IndexedLoadPat<SDPatternOperator LoadNode, Instruction Instr> :

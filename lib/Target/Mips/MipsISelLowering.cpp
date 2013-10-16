@@ -157,8 +157,9 @@ const char *MipsTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case MipsISD::CMovFP_T:          return "MipsISD::CMovFP_T";
   case MipsISD::CMovFP_F:          return "MipsISD::CMovFP_F";
   case MipsISD::FPRound:           return "MipsISD::FPRound";
-  case MipsISD::ExtractLOHI:       return "MipsISD::ExtractLOHI";
-  case MipsISD::InsertLOHI:        return "MipsISD::InsertLOHI";
+  case MipsISD::MFHI:              return "MipsISD::MFHI";
+  case MipsISD::MFLO:              return "MipsISD::MFLO";
+  case MipsISD::MTLOHI:            return "MipsISD::MTLOHI";
   case MipsISD::Mult:              return "MipsISD::Mult";
   case MipsISD::Multu:             return "MipsISD::Multu";
   case MipsISD::MAdd:              return "MipsISD::MAdd";

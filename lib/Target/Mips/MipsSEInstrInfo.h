@@ -83,6 +83,11 @@ private:
 
   void expandRetRA(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
                    unsigned Opc) const;
+  void expandPseudoMFHiLo(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
+                          unsigned NewOpc) const;
+  void expandPseudoMTLoHi(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
+                          unsigned LoOpc, unsigned HiOpc,
+                          bool HasExplicitDef) const;
   void expandExtractElementF64(MachineBasicBlock &MBB,
                                MachineBasicBlock::iterator I) const;
   void expandBuildPairF64(MachineBasicBlock &MBB,

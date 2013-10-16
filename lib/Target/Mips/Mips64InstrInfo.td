@@ -198,8 +198,11 @@ def PseudoDUDIV : MultDivPseudo<DUDIV, ACRegs128, CPU64RegsOpnd, MipsDivRemU,
 
 def MTHI64 : MoveToLOHI<"mthi", CPU64Regs, [HI64]>, MTLO_FM<0x11>;
 def MTLO64 : MoveToLOHI<"mtlo", CPU64Regs, [LO64]>, MTLO_FM<0x13>;
-def MFHI64 : MoveFromLOHI<"mfhi", CPU64Regs, [HI64]>, MFLO_FM<0x10>;
-def MFLO64 : MoveFromLOHI<"mflo", CPU64Regs, [LO64]>, MFLO_FM<0x12>;
+def MFHI64 : MoveFromLOHI<"mfhi", CPU64Regs, [AC0_64]>, MFLO_FM<0x10>;
+def MFLO64 : MoveFromLOHI<"mflo", CPU64Regs, [AC0_64]>, MFLO_FM<0x12>;
+def PseudoMFHI64 : PseudoMFLOHI<CPU64Regs, ACRegs128, MipsMFHI>;
+def PseudoMFLO64 : PseudoMFLOHI<CPU64Regs, ACRegs128, MipsMFLO>;
+def PseudoMTLOHI64 : PseudoMTLOHI<ACRegs128, CPU64Regs>;
 
 /// Sign Ext In Register Instructions.
 def SEB64 : SignExtInReg<"seb", i8, CPU64Regs>, SEB_FM<0x10, 0x20>;
@@ -317,10 +320,6 @@ def : MipsPat<(i64 (sext_inreg CPU64Regs:$src, i32)),
 
 // bswap MipsPattern
 def : MipsPat<(bswap CPU64Regs:$rt), (DSHD (DSBH CPU64Regs:$rt))>;
-
-// mflo/hi patterns.
-def : MipsPat<(i64 (ExtractLOHI ACRegs128:$ac, imm:$lohi_idx)),
-              (EXTRACT_SUBREG ACRegs128:$ac, imm:$lohi_idx)>;
 
 //===----------------------------------------------------------------------===//
 // Instruction aliases
