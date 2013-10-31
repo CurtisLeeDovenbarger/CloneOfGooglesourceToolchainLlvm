@@ -71,10 +71,6 @@
 # undef HAVE_MKDTEMP
 #endif
 
-#if defined(__ANDROID__) && defined(HAVE_MKDTEMP)
-extern "C" char *mkdtemp(const char *);
-#endif
-
 namespace {
 inline bool lastIsSlash(const std::string& path) {
   return !path.empty() && path[path.length() - 1] == '/';
