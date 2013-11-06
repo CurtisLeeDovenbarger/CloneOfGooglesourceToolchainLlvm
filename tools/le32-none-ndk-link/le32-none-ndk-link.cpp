@@ -130,6 +130,10 @@ static cl::opt<bool> CO10("eh-frame-hdr",
   cl::ZeroOrMore,
   cl::desc("Compatibility option: ignored"));
 
+static cl::list<unsigned int> OptimizationLevel("O",
+  cl::Prefix,
+  cl::desc("Optimization level for bitcode compiler"));
+
 static std::string progname;
 
 // Implied library dependency for specific libraries
@@ -280,7 +284,8 @@ static std::string* ProcessArgv(int argc, char **argv,
       if (!strncmp (c,"sysroot",7) ||
           !strncmp(c,"L",1) ||
           !strcmp(c,"disable-opt") ||
-          !strcmp(c,"link-native-binary"))
+          !strcmp(c,"link-native-binary") ||
+          (c[0] == 'O'))
         continue;
 
       Output << argv[i] << " ";
@@ -382,11 +387,14 @@ static void WrapAndroidBitcode(std::vector<std::string*> &BCStrings, std::string
   }
 
   AndroidBitcodeWrapper wrapper;
+  uint32_t opt_lv = 0;
+  if (OptimizationLevel.size() > 0)
+    opt_lv = OptimizationLevel[OptimizationLevel.size()-1];
   size_t actualWrapperLen = writeAndroidBitcodeWrapper(&wrapper,
                                                        totalBCSize,
-                                                       14,   /* FIXME: TargetAPI     */
-                                                       3300, /* llvm-3.3             */
-                                                       0);   /* OptimizationLevel    */
+                                                       14,      /* FIXME: TargetAPI     */
+                                                       3300,    /* llvm-3.3             */
+                                                       opt_lv); /* OptimizationLevel    */
   wrapper.BitcodeOffset += variable_header_size;
 
   // Write fixed fields
