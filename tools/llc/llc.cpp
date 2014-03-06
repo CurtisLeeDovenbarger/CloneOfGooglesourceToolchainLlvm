@@ -322,6 +322,10 @@ static int compileModule(char **argv, LLVMContext &Context) {
 
     if (DisableDotLoc)
       Target.setMCUseLoc(false);
+
+    if (DisableCFI)
+      Target.setMCUseCFI(false);
+
     if (EnableDwarfDirectory)
       Target.setMCUseDwarfDirectory(true);
 
