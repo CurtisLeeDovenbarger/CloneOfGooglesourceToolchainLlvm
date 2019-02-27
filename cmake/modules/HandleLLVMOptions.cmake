@@ -381,14 +381,6 @@ if( MSVC )
   # "Enforce type conversion rules".
   append("/Zc:rvalueCast" CMAKE_CXX_FLAGS)
 
-  if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC" AND NOT LLVM_ENABLE_INCREMENTAL_LINK)
-    foreach(CONFIG RELEASE RELWITHDEBINFO MINSIZEREL)
-      foreach(FLAG EXE MODULE SHARED STATIC)
-        string(REGEX REPLACE "[-/](INCREMENTAL:YES|INCREMENTAL:NO|INCREMENTAL)" "/INCREMENTAL:NO" CMAKE_${FLAG}_LINKER_FLAGS_${CONFIG} "${CMAKE_${FLAG}_LINKER_FLAGS_${CONFIG}}")
-      endforeach()
-    endforeach()
-  endif()
-
   if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT LLVM_ENABLE_LTO)
     # clang-cl and cl by default produce non-deterministic binaries because
     # link.exe /incremental requires a timestamp in the .obj file.  clang-cl
@@ -790,6 +782,16 @@ option(LLVM_ENABLE_EH "Enable Exception handling" OFF)
 option(LLVM_ENABLE_RTTI "Enable run time type information" OFF)
 if(LLVM_ENABLE_EH AND NOT LLVM_ENABLE_RTTI)
   message(FATAL_ERROR "Exception handling requires RTTI. You must set LLVM_ENABLE_RTTI to ON")
+endif()
+
+option(LLVM_USE_NEWPM "Build LLVM using the experimental new pass manager" Off)
+mark_as_advanced(LLVM_USE_NEWPM)
+if (LLVM_USE_NEWPM)
+  append("-fexperimental-new-pass-manager"
+    CMAKE_CXX_FLAGS
+    CMAKE_C_FLAGS
+    CMAKE_EXE_LINKER_FLAGS
+    CMAKE_SHARED_LINKER_FLAGS)
 endif()
 
 option(LLVM_ENABLE_IR_PGO "Build LLVM and tools with IR PGO instrumentation (deprecated)" Off)

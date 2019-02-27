@@ -1,9 +1,8 @@
 //===--------------------- Instruction.h ------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 /// \file
@@ -28,6 +27,7 @@
 #include <memory>
 
 namespace llvm {
+
 namespace mca {
 
 constexpr int UNKNOWN_CYCLES = -512;
@@ -137,8 +137,8 @@ class WriteState {
 public:
   WriteState(const WriteDescriptor &Desc, unsigned RegID,
              bool clearsSuperRegs = false, bool writesZero = false)
-      : WD(&Desc), CyclesLeft(UNKNOWN_CYCLES), RegisterID(RegID),
-        PRFID(0), ClearsSuperRegs(clearsSuperRegs), WritesZero(writesZero),
+      : WD(&Desc), CyclesLeft(UNKNOWN_CYCLES), RegisterID(RegID), PRFID(0),
+        ClearsSuperRegs(clearsSuperRegs), WritesZero(writesZero),
         IsEliminated(false), DependentWrite(nullptr), PartialWrite(nullptr),
         DependentWriteCyclesLeft(0) {}
 
@@ -154,7 +154,9 @@ public:
   void addUser(ReadState *Use, int ReadAdvance);
   void addUser(WriteState *Use);
 
-  unsigned getDependentWriteCyclesLeft() const { return DependentWriteCyclesLeft; }
+  unsigned getDependentWriteCyclesLeft() const {
+    return DependentWriteCyclesLeft;
+  }
 
   unsigned getNumUsers() const {
     unsigned NumUsers = Users.size();
@@ -166,6 +168,14 @@ public:
   bool clearsSuperRegisters() const { return ClearsSuperRegs; }
   bool isWriteZero() const { return WritesZero; }
   bool isEliminated() const { return IsEliminated; }
+
+  bool isReady() const {
+    if (getDependentWrite())
+      return false;
+    unsigned CyclesLeft = getDependentWriteCyclesLeft();
+    return !CyclesLeft || CyclesLeft < getLatency();
+  }
+
   bool isExecuted() const {
     return CyclesLeft != UNKNOWN_CYCLES && CyclesLeft <= 0;
   }
@@ -237,6 +247,7 @@ public:
   unsigned getRegisterID() const { return RegisterID; }
   unsigned getRegisterFileID() const { return PRFID; }
 
+  bool isPending() const { return !IndependentFromDef && CyclesLeft > 0; }
   bool isReady() const { return IsReady; }
   bool isImplicitRead() const { return RD->isImplicitRead(); }
 
@@ -327,15 +338,26 @@ struct InstrDesc {
   // A list of buffered resources consumed by this instruction.
   SmallVector<uint64_t, 4> Buffers;
 
+  unsigned UsedProcResUnits;
+  unsigned UsedProcResGroups;
+
   unsigned MaxLatency;
   // Number of MicroOps for this instruction.
   unsigned NumMicroOps;
+  // SchedClassID used to construct this InstrDesc.
+  // This information is currently used by views to do fast queries on the
+  // subtarget when computing the reciprocal throughput.
+  unsigned SchedClassID;
 
   bool MayLoad;
   bool MayStore;
   bool HasSideEffects;
   bool BeginGroup;
   bool EndGroup;
+
+  // True if all buffered resources are in-order, and there is at least one
+  // buffer which is a dispatch hazard (BufferSize = 0).
+  bool MustIssueImmediately;
 
   // A zero latency instruction doesn't consume any scheduler resources.
   bool isZeroLatency() const { return !MaxLatency && Resources.empty(); }
@@ -399,12 +421,13 @@ public:
 /// that are sent to the various components of the simulated hardware pipeline.
 class Instruction : public InstructionBase {
   enum InstrStage {
-    IS_INVALID,   // Instruction in an invalid state.
-    IS_AVAILABLE, // Instruction dispatched but operands are not ready.
-    IS_READY,     // Instruction dispatched and operands ready.
-    IS_EXECUTING, // Instruction issued.
-    IS_EXECUTED,  // Instruction executed. Values are written back.
-    IS_RETIRED    // Instruction retired.
+    IS_INVALID,    // Instruction in an invalid state.
+    IS_DISPATCHED, // Instruction dispatched but operands are not ready.
+    IS_PENDING,    // Instruction is not ready, but operand latency is known.
+    IS_READY,      // Instruction dispatched and operands ready.
+    IS_EXECUTING,  // Instruction issued.
+    IS_EXECUTED,   // Instruction executed. Values are written back.
+    IS_RETIRED     // Instruction retired.
   };
 
   // The current instruction stage.
@@ -434,15 +457,18 @@ public:
   // all the definitions.
   void execute();
 
-  // Force a transition from the IS_AVAILABLE state to the IS_READY state if
-  // input operands are all ready. State transitions normally occur at the
-  // beginning of a new cycle (see method cycleEvent()). However, the scheduler
-  // may decide to promote instructions from the wait queue to the ready queue
-  // as the result of another issue event.  This method is called every time the
-  // instruction might have changed in state.
+  // Force a transition from the IS_DISPATCHED state to the IS_READY or
+  // IS_PENDING state. State transitions normally occur either at the beginning
+  // of a new cycle (see method cycleEvent()), or as a result of another issue
+  // event. This method is called every time the instruction might have changed
+  // in state. It internally delegates to method updateDispatched() and
+  // updateWaiting().
   void update();
+  bool updateDispatched();
+  bool updatePending();
 
-  bool isDispatched() const { return Stage == IS_AVAILABLE; }
+  bool isDispatched() const { return Stage == IS_DISPATCHED; }
+  bool isPending() const { return Stage == IS_PENDING; }
   bool isReady() const { return Stage == IS_READY; }
   bool isExecuting() const { return Stage == IS_EXECUTING; }
   bool isExecuted() const { return Stage == IS_EXECUTED; }
@@ -454,7 +480,7 @@ public:
                   [](const WriteState &W) { return W.isEliminated(); });
   }
 
-  // Forces a transition from state IS_AVAILABLE to state IS_EXECUTED.
+  // Forces a transition from state IS_DISPATCHED to state IS_EXECUTED.
   void forceExecuted();
 
   void retire() {
@@ -541,4 +567,4 @@ public:
 } // namespace mca
 } // namespace llvm
 
-#endif  // LLVM_MCA_INSTRUCTION_H
+#endif // LLVM_MCA_INSTRUCTION_H

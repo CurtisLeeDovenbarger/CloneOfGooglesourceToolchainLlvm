@@ -1,9 +1,8 @@
 //===- lib/CodeGen/GlobalISel/LegalizerPredicates.cpp - Predicates --------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -57,10 +56,30 @@ LegalityPredicate LegalityPredicates::isScalar(unsigned TypeIdx) {
   };
 }
 
+LegalityPredicate LegalityPredicates::isVector(unsigned TypeIdx) {
+  return [=](const LegalityQuery &Query) {
+    return Query.Types[TypeIdx].isVector();
+  };
+}
+
+LegalityPredicate LegalityPredicates::isPointer(unsigned TypeIdx) {
+  return [=](const LegalityQuery &Query) {
+    return Query.Types[TypeIdx].isPointer();
+  };
+}
+
+LegalityPredicate LegalityPredicates::isPointer(unsigned TypeIdx,
+                                                unsigned AddrSpace) {
+  return [=](const LegalityQuery &Query) {
+    LLT Ty = Query.Types[TypeIdx];
+    return Ty.isPointer() && Ty.getAddressSpace() == AddrSpace;
+  };
+}
+
 LegalityPredicate LegalityPredicates::narrowerThan(unsigned TypeIdx,
                                                    unsigned Size) {
   return [=](const LegalityQuery &Query) {
-    const LLT &QueryTy = Query.Types[TypeIdx];
+    const LLT QueryTy = Query.Types[TypeIdx];
     return QueryTy.isScalar() && QueryTy.getSizeInBits() < Size;
   };
 }
@@ -68,15 +87,46 @@ LegalityPredicate LegalityPredicates::narrowerThan(unsigned TypeIdx,
 LegalityPredicate LegalityPredicates::widerThan(unsigned TypeIdx,
                                                 unsigned Size) {
   return [=](const LegalityQuery &Query) {
-    const LLT &QueryTy = Query.Types[TypeIdx];
+    const LLT QueryTy = Query.Types[TypeIdx];
     return QueryTy.isScalar() && QueryTy.getSizeInBits() > Size;
+  };
+}
+
+LegalityPredicate LegalityPredicates::scalarOrEltNarrowerThan(unsigned TypeIdx,
+                                                              unsigned Size) {
+  return [=](const LegalityQuery &Query) {
+    const LLT QueryTy = Query.Types[TypeIdx];
+    return QueryTy.getScalarSizeInBits() < Size;
+  };
+}
+
+LegalityPredicate LegalityPredicates::scalarOrEltWiderThan(unsigned TypeIdx,
+                                                           unsigned Size) {
+  return [=](const LegalityQuery &Query) {
+    const LLT QueryTy = Query.Types[TypeIdx];
+    return QueryTy.getScalarSizeInBits() > Size;
+  };
+}
+
+LegalityPredicate LegalityPredicates::scalarOrEltSizeNotPow2(unsigned TypeIdx) {
+  return [=](const LegalityQuery &Query) {
+    const LLT QueryTy = Query.Types[TypeIdx];
+    return !isPowerOf2_32(QueryTy.getScalarSizeInBits());
   };
 }
 
 LegalityPredicate LegalityPredicates::sizeNotPow2(unsigned TypeIdx) {
   return [=](const LegalityQuery &Query) {
-    const LLT &QueryTy = Query.Types[TypeIdx];
+    const LLT QueryTy = Query.Types[TypeIdx];
     return QueryTy.isScalar() && !isPowerOf2_32(QueryTy.getSizeInBits());
+  };
+}
+
+LegalityPredicate LegalityPredicates::sameSize(unsigned TypeIdx0,
+                                               unsigned TypeIdx1) {
+  return [=](const LegalityQuery &Query) {
+    return Query.Types[TypeIdx0].getSizeInBits() ==
+           Query.Types[TypeIdx1].getSizeInBits();
   };
 }
 
@@ -88,8 +138,8 @@ LegalityPredicate LegalityPredicates::memSizeInBytesNotPow2(unsigned MMOIdx) {
 
 LegalityPredicate LegalityPredicates::numElementsNotPow2(unsigned TypeIdx) {
   return [=](const LegalityQuery &Query) {
-    const LLT &QueryTy = Query.Types[TypeIdx];
-    return QueryTy.isVector() && isPowerOf2_32(QueryTy.getNumElements());
+    const LLT QueryTy = Query.Types[TypeIdx];
+    return QueryTy.isVector() && !isPowerOf2_32(QueryTy.getNumElements());
   };
 }
 
